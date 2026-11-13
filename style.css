@@ -243,3 +243,13 @@ dialog#sheet h2 { font-size: 1.15rem; margin-bottom: 14px; }
 .cats-extras { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .cats-extras li { display: flex; align-items: center; border: 1px solid var(--linha); border-radius: 99px; padding-left: 14px; font-size: .9rem; }
 .cats-extras button { width: 40px; height: 40px; border: 0; background: none; font-size: 1.2rem; color: var(--suave); }
+
+/* Metas, acerto e caixas de marcar */
+.marcar { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--texto); font-size: .9rem; margin: 4px 0 14px; }
+.marcar input { flex: none; width: 22px; height: 22px; min-height: 0; margin: 1px 0 0; padding: 0; accent-color: var(--verde); }
+.acerto { font-size: 1.05rem; margin-bottom: 8px; }
+.ajuda.sem-margem { margin-bottom: 0; }
+.ajuda + .ajuda.sem-margem, .chips + .ajuda.sem-margem { margin-top: 4px; }
+.cartao form[data-form="rendas"] .btn { width: 100%; }
+.resumo .limite + .limite, .resumo dl + .limite { margin-top: 10px; }
+.total-linha span { padding-right: 10px; }

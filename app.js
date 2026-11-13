@@ -22,6 +22,7 @@ function salvarFiltro(v) { try { localStorage.setItem('filtro', v); } catch { /*
 const ui = {
   user: undefined,          // undefined = verificando; null = deslogado
   aba: 'inicio',
+  inicioVista: 'resumo',    // 'resumo' | 'graficos'
   grafMes: null,            // mês em destaque no gráfico (null = mês atual)
   mes: L.mesDe(new Date()),
   dados: null,
@@ -49,6 +50,9 @@ const pessoas = () => ui.dados?.config?.pessoas || {};
 const donos = () => ['casa', ...Object.keys(pessoas()).sort((a, b) => (a === ui.user.uid ? -1 : b === ui.user.uid ? 1 : a.localeCompare(b)))];
 const filtroAtual = () => (ui.filtro === 'tudo' || donos().includes(ui.filtro) ? ui.filtro : 'tudo');
 const nomeDono = (d) => L.nomeDono(d, pessoas());
+const uids = () => Object.keys(pessoas()).sort();
+const cotaDe = (uid) => L.cota(ui.dados.config, uid, uids());
+const rendaCasa = () => L.rendaCasa(ui.dados.config);
 
 function chipsFiltro() {
   const f = filtroAtual();
@@ -78,7 +82,7 @@ function telaLogin() {
 function linhaConta(c, hoje) {
   const st = L.status(c, hoje);
   const parcela = c.parcelaN ? `<span class="tag">${c.parcelaN}/${c.parcelaTotal}</span>` : '';
-  const fixa = c.origem === 'recorrente' ? '<span class="tag">fixa</span>' : '';
+  const fixa = c.origem === 'recorrente' ? '<span class="tag">fixa</span>' : c.origem === 'meta' ? '<span class="tag">meta</span>' : '';
   return `
   <li class="conta st-${st.tipo}">
     <button class="check" role="checkbox" aria-checked="${!!c.pago}" data-acao="pagar" data-id="${esc(c.id)}"
@@ -98,7 +102,11 @@ function telaMes() {
   const f = filtroAtual();
   const doMes = L.contasDoMes(ui.dados, ui.mes);
   const lista = L.filtrar(doMes, f);
-  const r = L.resumo(lista, ui.dados.config.renda, L.somar(L.gastosDoMes(ui.dados, ui.mes)));
+  const gVista = L.gastosDoMes(ui.dados, ui.mes).filter(L.aVista);
+  const r = L.resumo(lista, rendaCasa(), L.somar(gVista));
+  const pessoa = f !== 'tudo' && f !== 'casa' && L.rendaDe(ui.dados.config, f) ? f : null;
+  const sobraPessoa = pessoa
+    ? L.rendaDe(ui.dados.config, pessoa) - L.parteDe(doMes, pessoa, cotaDe(pessoa)) - L.parteDe(gVista, pessoa, cotaDe(pessoa)) : 0;
   const partes = f === 'tudo' ? L.porDono(doMes) : [];
   const pct = r.total ? Math.round((r.pago / r.total) * 100) : 0;
   const abertas = lista.filter((c) => !c.pago);
@@ -114,10 +122,12 @@ function telaMes() {
     <dl>
       <div><dt>Total do mês</dt><dd>${L.fmtValor(r.total)}</dd></div>
       <div><dt>Já pago</dt><dd>${L.fmtValor(r.pago)}</dd></div>
-      ${f === 'tudo' ? `<div><dt>Sobra (com gastos)</dt><dd class="${r.sobra !== null && r.sobra < 0 ? 'negativo' : ''}">${
+      ${f === 'tudo' ? `<div><dt>Sobra da casa</dt><dd class="${r.sobra !== null && r.sobra < 0 ? 'negativo' : ''}">${
         r.sobra === null ? '<button class="link" data-acao="ir-mais">informar renda</button>' : L.fmtValor(r.sobra)}</dd></div>`
+        : pessoa ? `<div><dt>Sobra de ${esc(nomeDono(pessoa))}</dt><dd class="${sobraPessoa < 0 ? 'negativo' : ''}">${L.fmtValor(sobraPessoa)}</dd></div>`
         : `<div><dt>Contas</dt><dd>${pagas.length} de ${lista.length} pagas</dd></div>`}
     </dl>
+    ${pessoa ? `<p class="limite">A sobra já desconta ${Math.round(cotaDe(pessoa) * 100)}% das contas e gastos dos dois.</p>` : ''}
     ${partes.length > 1 ? `<ul class="partes" aria-label="Total do mês por pessoa">
       ${partes.map((p) => `<li><button data-acao="filtro" data-filtro="${esc(p.dono)}"><span>${esc(nomeDono(p.dono))}</span><strong>${L.fmtValor(p.total)}</strong></button></li>`).join('')}
     </ul>` : ''}
@@ -163,7 +173,7 @@ function telaGastos() {
         : `Restam ${L.fmtValor(limite - total)} do limite de ${L.fmtValor(limite)}`}</p>` : ''}
     <dl>
       <div><dt>Hoje</dt><dd>${ui.mes === mesAtual() ? L.fmtValor(doDia) : '—'}</dd></div>
-      <div><dt>Lançamentos</dt><dd>${lista.length}</dd></div>
+      <div><dt>No cartão</dt><dd>${L.fmtValor(total - L.somar(lista.filter(L.aVista)))}</dd></div>
       <div><dt>Mês anterior</dt><dd>${L.fmtValor(anterior)}</dd></div>
     </dl>
     ${!limite && f === 'tudo' ? '<p class="limite"><button class="link" data-acao="ir-mais">Definir um limite mensal</button></p>' : ''}
@@ -177,7 +187,7 @@ function telaGastos() {
   <ul class="lista">
     ${d.itens.map((g) => `
     <li class="item"><button class="item-corpo" data-acao="editar-gasto" data-id="${esc(g.id)}">
-      <span class="conta-nome">${esc(g.descricao)}</span>
+      <span class="conta-nome">${esc(g.descricao)}${L.aVista(g) ? '' : ' <span class="tag">cartão</span>'}</span>
       <span class="conta-meta">${esc(g.categoria || 'Outros')}${f === 'tudo' ? ` · ${esc(nomeDono(L.donoDe(g)))}` : ''}</span>
     </button><span class="conta-valor">${L.fmtValor(g.valor)}</span></li>`).join('')}
   </ul>`).join('')}`}
@@ -187,7 +197,7 @@ function telaGastos() {
 // Colunas empilhadas (contas + gastos) dos últimos 6 meses. Tocar em um mês mostra os valores.
 function graficoMeses() {
   const serie = L.serieMeses(ui.dados, mesAtual(), 6);
-  const renda = ui.dados.config.renda || 0;
+  const renda = rendaCasa();
   const { topo, marcas } = L.escala(Math.max(renda, ...serie.map((m) => m.total)));
   const sel = serie.find((m) => m.mes === ui.grafMes) || serie.at(-1);
   const pct = (v) => `${(v / topo) * 100}%`;
@@ -231,26 +241,69 @@ function barrasCategoria(cats) {
   </ul>`;
 }
 
+function linhaMeta(m) {
+  const guardado = L.guardadoMeta(ui.dados, m);
+  const pct = m.alvo ? Math.min(100, Math.round((guardado / m.alvo) * 100)) : 0;
+  const falta = Math.max(0, m.alvo - guardado);
+  const meses = m.mensal && falta ? Math.ceil(falta / m.mensal) : 0;
+  return `
+  <li class="item"><button class="item-corpo" data-acao="editar-meta" data-id="${esc(m.id)}">
+    <span class="conta-nome">${esc(m.nome)}</span>
+    <span class="conta-meta">${L.fmtValor(guardado)} de ${L.fmtValor(m.alvo)}${
+      !falta ? ' · meta atingida' : meses ? ` · ${meses === 1 ? 'falta 1 mês' : `faltam ${meses} meses`}` : ''}</span>
+    <span class="barra fina" role="img" aria-label="${pct}% guardado"><span style="width:${pct}%"></span></span>
+  </button><span class="conta-valor">${pct}%${m.mensal ? `<small>${L.fmtValor(m.mensal)}/mês</small>` : ''}</span></li>`;
+}
+
 function telaInicio() {
   const hoje = L.hojeStr();
   const mes = mesAtual();
+  const cfg = ui.dados.config;
   const doMes = L.contasDoMes(ui.dados, mes);
-  const gastos = L.somar(L.gastosDoMes(ui.dados, mes));
-  const r = L.resumo(doMes, ui.dados.config.renda, gastos);
+  const gastos = L.gastosDoMes(ui.dados, mes);
+  const vista = gastos.filter(L.aVista);
+  const noCartao = L.somar(gastos) - L.somar(vista);
+  const pg = L.podeGastar({ renda: rendaCasa(), contas: L.somar(doMes), gastosAVista: L.somar(vista),
+    gastosHoje: L.somar(vista.filter((g) => g.data === hoje)), hoje });
   const abertas = [...L.contasDoMes(ui.dados, L.somaMes(mes, -1)), ...doMes].filter((c) => !c.pago);
-  const cats = L.saidasPorCategoria(ui.dados, mes);
+  const ac = L.acerto(ui.dados, mes, uids(), cfg);
   const nome = pessoas()[ui.user.uid];
-  return `
+  const cats = L.saidasPorCategoria(ui.dados, mes);
+  const vistaBtn = (v, n) => `<button data-acao="inicio-vista" data-vista="${v}" aria-pressed="${ui.inicioVista === v}">${n}</button>`;
+  const topo = `
   <header class="topo simples"><div><h1>${nome ? `Olá, ${esc(nome)}` : 'Olá'}</h1><p class="sub">${L.nomeMes(mes)}</p></div></header>
-  <section class="resumo" aria-label="Resumo do mês">
-    <p class="rotulo">${r.sobra === null ? 'Saídas do mês' : r.sobra < 0 ? 'Faltam para fechar o mês' : 'Sobra do mês'}</p>
-    <p class="destaque">${L.fmtValor(r.sobra === null ? r.total + gastos : Math.abs(r.sobra))}</p>
+  <div class="chips" role="group" aria-label="O que mostrar">${vistaBtn('resumo', 'Resumo')}${vistaBtn('graficos', 'Gráficos')}</div>`;
+
+  if (ui.inicioVista === 'graficos') {
+    return `${topo}
+    <h2 class="secao">Saídas por mês</h2>
+    <section class="cartao">${graficoMeses()}</section>
+    <h2 class="secao">Para onde foi o dinheiro em ${L.nomeMes(mes).split(' ')[0].toLowerCase()}</h2>
+    <section class="cartao">${cats.length ? `<p class="ajuda">Contas e gastos do mês, somados por categoria.</p>${barrasCategoria(cats)}`
+      : '<p class="ajuda sem-margem">Ainda não há contas nem gastos neste mês.</p>'}</section>`;
+  }
+
+  const cartao = !pg ? `
+    <p class="rotulo">Saídas do mês</p>
+    <p class="destaque">${L.fmtValor(L.somar(doMes) + L.somar(vista))}</p>
+    <p class="limite"><button class="link" data-acao="ir-mais">Informar a renda para ver quanto dá para gastar por dia</button></p>`
+    : pg.noVermelho ? `
+    <p class="rotulo">O mês passou da renda em</p>
+    <p class="destaque">${L.fmtValor(-pg.livre)}</p>
+    <p class="limite">Contas, metas e gastos já somam mais do que a renda de ${L.fmtValor(rendaCasa())}.</p>`
+    : `
+    <p class="rotulo">Hoje ainda dá para gastar</p>
+    <p class="destaque">${L.fmtValor(pg.hoje)}</p>
+    <p class="limite">Restam ${L.fmtValor(pg.livre)} para ${pg.dias === 1 ? 'hoje, o último dia do mês' : `os ${pg.dias} dias que faltam`}${pg.dias > 1 ? `: ${L.fmtValor(pg.porDia)} por dia` : ''}.</p>`;
+  return `${topo}
+  <section class="resumo" aria-label="Quanto dá para gastar">
+    ${cartao}
     <dl>
-      <div><dt>Contas do mês</dt><dd>${L.fmtValor(r.total)}</dd></div>
-      <div><dt>Gastos</dt><dd>${L.fmtValor(gastos)}</dd></div>
-      <div><dt>Falta pagar</dt><dd>${L.fmtValor(r.falta)}</dd></div>
+      <div><dt>${pg ? 'Renda' : 'Falta pagar'}</dt><dd>${L.fmtValor(pg ? rendaCasa() : L.resumo(doMes, 0).falta)}</dd></div>
+      <div><dt>Contas e metas</dt><dd>${L.fmtValor(L.somar(doMes))}</dd></div>
+      <div><dt>Gastos</dt><dd>${L.fmtValor(L.somar(vista))}</dd></div>
     </dl>
-    ${r.sobra === null ? '<p class="limite"><button class="link" data-acao="ir-mais">Informar a renda para ver quanto sobra</button></p>' : ''}
+    ${noCartao ? `<p class="limite">No cartão este mês: ${L.fmtValor(noCartao)}. Esse valor vem na próxima fatura.</p>` : ''}
   </section>
   <div class="atalhos">
     <button class="btn primario" data-acao="novo-gasto">+ Gasto</button>
@@ -260,33 +313,45 @@ function telaInicio() {
   ${abertas.length ? `<ul class="lista">${abertas.slice(0, 4).map((c) => linhaConta(c, hoje)).join('')}</ul>
     ${abertas.length > 4 ? `<p class="mais-itens">e mais ${abertas.length - 4} em aberto</p>` : ''}`
     : `<div class="vazio"><p>${doMes.length ? 'Tudo pago por aqui.' : 'Nenhuma conta neste mês ainda.'}</p></div>`}
-  <h2 class="secao">Saídas por mês</h2>
-  <section class="cartao">${graficoMeses()}</section>
-  ${cats.length ? `<h2 class="secao">Para onde foi o dinheiro em ${L.nomeMes(mes).split(' ')[0].toLowerCase()}</h2>
-  <section class="cartao"><p class="ajuda">Contas e gastos do mês, somados por categoria.</p>${barrasCategoria(cats)}</section>` : ''}`;
+  <h2 class="secao com-botao">Metas<button class="link" data-acao="ir-plano">${ui.dados.metas.length ? 'ver todas' : 'criar'}</button></h2>
+  ${ui.dados.metas.length ? `<ul class="lista">${ui.dados.metas.slice(0, 2).map(linhaMeta).join('')}</ul>`
+    : '<div class="vazio"><p>Nenhuma meta ainda.</p><p>Uma reserva de emergência costuma ser a primeira.</p></div>'}
+  ${ac ? `<h2 class="secao">Acerto de ${L.nomeMes(mes).split(' ')[0].toLowerCase()}</h2>
+  <section class="cartao">
+    <p class="acerto">${ac.valor < 100 ? 'Vocês estão quites.'
+      : `<strong>${esc(nomeDono(ac.devedor))}</strong> deve <strong>${L.fmtValor(ac.valor)}</strong> a <strong>${esc(nomeDono(ac.credor))}</strong>`}</p>
+    <p class="ajuda sem-margem">Das despesas dos dois (${L.fmtValor(ac.total)}), ${uids().map((u) => `${esc(nomeDono(u))} pagou ${L.fmtValor(ac.pagos[u])}`).join(' e ')}. Divisão: ${uids().map((u) => `${Math.round(cotaDe(u) * 100)}%`).join(' e ')}.</p>
+  </section>` : ''}`;
 }
 
 function telaPlano() {
   const f = filtroAtual();
   const proj = L.projecao(ui.dados, mesAtual(), 12, f);
   const max = Math.max(1, ...proj.map((p) => p.total));
+  const metas = L.filtrar(ui.dados.metas, f);
   const ativos = L.filtrar(ui.dados.parcelamentos, f)
     .filter((p) => L.fimParcelamento(p) >= mesAtual())
     .sort((a, b) => L.fimParcelamento(a).localeCompare(L.fimParcelamento(b)));
+  const parcMes = L.parcelasDoMes({ parcelamentos: ativos }, mesAtual());
   const recs = L.filtrar(ui.dados.recorrentes, f).sort((a, b) => (a.dia - b.dia) || a.nome.localeCompare(b.nome, 'pt-BR'));
   const mensal = recs.filter((r) => r.tipo !== 'anual').reduce((s, r) => s + (r.valor || 0), 0);
+  const anuais = L.totalAnuais(recs);
   return `
   <header class="topo simples"><h1>Planejar</h1></header>
   ${chipsFiltro()}
+  <h2 class="secao com-botao">Metas <span>${metas.length}</span><button class="btn pequeno" data-acao="nova-meta">+ Nova</button></h2>
+  ${metas.length === 0 ? '<div class="vazio"><p>Nenhuma meta.</p><p>Guardar primeiro e gastar o que sobra funciona melhor do que guardar o que sobrar.</p></div>'
+    : `<ul class="lista">${metas.map(linhaMeta).join('')}</ul>`}
   <h2 class="secao com-botao">Contas fixas <span>${recs.length}</span><button class="btn pequeno" data-acao="nova-rec">+ Nova</button></h2>
   ${recs.length === 0 ? '<div class="vazio"><p>Nenhuma conta fixa cadastrada.</p><p>Cadastre aluguel, internet, luz e assinaturas uma vez, e elas aparecem sozinhas todo mês.</p></div>' : `
   <ul class="lista">
     ${recs.map((r) => `
     <li class="item"><button class="item-corpo" data-acao="editar-rec" data-id="${esc(r.id)}">
-      <span class="conta-nome">${esc(r.nome)}</span>
+      <span class="conta-nome">${esc(r.nome)}${r.variavel ? ' <span class="tag">valor varia</span>' : ''}</span>
       <span class="conta-meta">${r.tipo === 'anual' ? `Todo ano, em ${L.nomeMesNum(r.mes).toLowerCase()}, dia ${r.dia}` : `Todo mês, dia ${r.dia}`} · ${esc(r.categoria || 'Outros')} · ${esc(nomeDono(L.donoDe(r)))}</span>
     </button><span class="conta-valor">${L.fmtValor(r.valor)}</span></li>`).join('')}
     <li class="total-linha"><span>Fixas por mês</span><strong>${L.fmtValor(mensal)}</strong></li>
+    ${anuais ? `<li class="total-linha"><span>Para as anuais não pesarem, guardar por mês</span><strong>${L.fmtValor(Math.round(anuais / 12))}</strong></li>` : ''}
   </ul>`}
   <h2 class="secao com-botao">Parcelamentos <span>${ativos.length}</span><button class="btn pequeno" data-acao="novo-parc">+ Novo</button></h2>
   ${ativos.length === 0 ? '<div class="vazio"><p>Nenhum parcelamento em andamento.</p></div>' : `
@@ -296,15 +361,16 @@ function telaPlano() {
       const feitas = Math.max(0, Math.min(p.total, L.diffMeses(p.inicio, mesAtual()) + 1));
       return `
       <li class="item"><button class="item-corpo" data-acao="editar-parc" data-id="${esc(p.id)}">
-        <span class="conta-nome">${esc(p.nome)}</span>
+        <span class="conta-nome">${esc(p.nome)}${p.naFatura ? ' <span class="tag">na fatura</span>' : ''}</span>
         <span class="conta-meta">${n ? `Parcela ${n} de ${p.total}` : `Começa em ${L.nomeMes(p.inicio)}`} · termina em ${L.nomeMes(L.fimParcelamento(p))} · ${esc(nomeDono(L.donoDe(p)))}</span>
         <span class="barra fina"><span style="width:${(feitas / p.total) * 100}%"></span></span>
       </button><span class="conta-valor">${L.fmtValor(p.valorParcela)}<small>/mês</small></span></li>`;
     }).join('')}
+    <li class="total-linha"><span>Parcelas neste mês${f === 'tudo' && rendaCasa() ? ` (${Math.round((parcMes / rendaCasa()) * 100)}% da renda)` : ''}</span><strong>${L.fmtValor(parcMes)}</strong></li>
   </ul>`}
   <h2 class="secao">Próximos 12 meses</h2>
   <section class="cartao">
-    <p class="ajuda">Quanto já está comprometido em cada mês, somando fixas, parcelas e contas lançadas. Toque em um mês para abrir.</p>
+    <p class="ajuda">Quanto já está comprometido em cada mês, somando fixas, metas, parcelas e contas lançadas. Toque em um mês para abrir.</p>
     <ul class="proj">
       ${proj.map((p) => `
       <li><button data-acao="ver-mes" data-mes="${p.mes}">
@@ -331,17 +397,26 @@ function secaoLembrete() {
 }
 
 function telaMais() {
-  const renda = ui.dados.config.renda;
+  const cfg = ui.dados.config;
   return `
   <header class="topo simples"><h1>Mais</h1></header>
   <section class="cartao">
-    <h2>Renda mensal da casa</h2>
-    <p class="ajuda">Usada só para calcular quanto sobra no mês.</p>
-    <form data-form="renda" class="linha-form">
-      <label class="sr" for="renda">Renda mensal</label>
-      <div class="campo-rs"><span>R$</span><input id="renda" name="renda" inputmode="decimal" value="${renda ? L.valorParaCampo(renda) : ''}" placeholder="0,00"></div>
+    <h2>Renda mensal</h2>
+    <p class="ajuda">A renda de cada um. A soma (${L.fmtValor(rendaCasa())}) é a renda da casa, usada para calcular quanto dá para gastar.</p>
+    <form data-form="rendas">
+      ${uids().map((u) => `<label>${esc(nomeDono(u))}<div class="campo-rs"><span>R$</span>
+        <input name="renda_${esc(u)}" inputmode="decimal" value="${L.rendaDe(cfg, u) ? L.valorParaCampo(L.rendaDe(cfg, u)) : ''}" placeholder="0,00"></div></label>`).join('')}
       <button class="btn">Salvar</button>
     </form>
+  </section>
+  <section class="cartao">
+    <h2>Divisão das despesas dos dois</h2>
+    <p class="ajuda">Vale para o acerto do mês e para a sobra de cada um.</p>
+    <div class="chips quebra" role="group" aria-label="Como dividir">
+      <button data-acao="divisao" data-modo="meio" aria-pressed="${cfg.divisao !== 'proporcional'}">Partes iguais</button>
+      <button data-acao="divisao" data-modo="proporcional" aria-pressed="${cfg.divisao === 'proporcional'}">Proporcional à renda</button>
+    </div>
+    ${uids().length > 1 ? `<p class="ajuda sem-margem">Hoje: ${uids().map((u) => `${esc(nomeDono(u))} ${Math.round(cotaDe(u) * 100)}%`).join(' · ')}</p>` : ''}
   </section>
   <section class="cartao">
     <h2>Lembrete de vencimento</h2>
@@ -456,7 +531,7 @@ function formConta(c) {
   abrirSheet(`
   <form data-form="conta" data-id="${esc(c?.id || '')}" novalidate>
     <h2>${novo ? 'Nova conta' : 'Editar conta'}</h2>
-    ${gerada ? `<p class="ajuda">${c.origem === 'parcela' ? `Parcela ${c.parcelaN} de ${c.parcelaTotal}.` : 'Conta fixa.'} As mudanças valem só para ${L.nomeMes(c.mes)}.</p>` : ''}
+    ${gerada ? `<p class="ajuda">${c.origem === 'parcela' ? `Parcela ${c.parcelaN} de ${c.parcelaTotal}.` : c.origem === 'meta' ? 'Depósito da meta.' : 'Conta fixa.'} As mudanças valem só para ${L.nomeMes(c.mes)}.</p>` : ''}
     <label>Nome<input name="nome" required maxlength="60" value="${esc(c?.nome || '')}" placeholder="Ex.: Conta de luz"></label>
     ${campoValor('valor', c?.valor, 'Valor')}
     <label>Vencimento<input name="venc" type="date" required value="${venc}" ${limites}></label>
@@ -485,6 +560,9 @@ function formGasto(g) {
       <button type="button" class="chip-nova" data-acao="nova-categoria">＋ Nova</button>
     </div></fieldset>
     ${campoDono(g && L.donoDe(g))}
+    <fieldset class="dono-campo"><legend>Pagou como</legend><div class="chips quebra">
+      ${[['avista', 'Dinheiro, Pix ou débito'], ['cartao', 'Cartão de crédito']].map(([v, n]) => `<label><input type="radio" name="pagamento" value="${v}" ${v === (g?.pagamento || lerLocal('pagamento') || 'avista') ? 'checked' : ''}><span>${n}</span></label>`).join('')}
+    </div></fieldset>
     <label>Dia<input name="data" type="date" required value="${data}" max="${L.hojeStr()}"></label>
     <p class="erro" role="alert" hidden></p>
     <div class="acoes">
@@ -494,6 +572,55 @@ function formGasto(g) {
     </div>
   </form>`);
   if (!g) $sheet.querySelector('[name=valor]').focus();
+}
+
+function marcarPaga(c, pago, valor = c.valor) {
+  store.gravar('contas', c.id, {
+    ...L.paraGravar(c), valor, pago,
+    pagoEm: pago ? L.hojeStr() : null,
+    pagoPor: pago ? ui.user.email : null,
+    pagoPorUid: pago ? ui.user.uid : null,
+  }, erroGravar);
+  if (pago) toast(`${c.nome}: marcada como paga`);
+}
+
+// Conta de valor variável: confirma o valor real antes de marcar como paga.
+function formPagar(c) {
+  abrirSheet(`
+  <form data-form="pagar" data-id="${esc(c.id)}" novalidate>
+    <h2>Pagar ${esc(c.nome)}</h2>
+    <p class="ajuda">O valor desta conta muda todo mês. Confira com a fatura de ${L.nomeMes(c.mes).split(' ')[0].toLowerCase()}.</p>
+    ${campoValor('valor', c.valor, 'Valor pago')}
+    <p class="erro" role="alert" hidden></p>
+    <div class="acoes">
+      <button type="button" class="btn" data-acao="fechar">Cancelar</button>
+      <button class="btn primario">Confirmar pagamento</button>
+    </div>
+  </form>`);
+  const campo = $sheet.querySelector('[name=valor]');
+  campo.focus(); campo.select();
+}
+
+function formMeta(m) {
+  abrirSheet(`
+  <form data-form="meta" data-id="${esc(m?.id || '')}" novalidate>
+    <h2>${m ? 'Editar meta' : 'Nova meta'}</h2>
+    <label>Para quê<input name="nome" required maxlength="40" value="${esc(m?.nome || '')}" placeholder="Ex.: Reserva de emergência"></label>
+    ${campoValor('alvo', m?.alvo, 'Quanto querem juntar')}
+    <div class="dupla">
+      ${campoValor('mensal', m?.mensal, 'Guardar por mês')}
+      <label>Dia de guardar<input name="dia" type="number" inputmode="numeric" min="1" max="31" value="${m?.dia || 5}"></label>
+    </div>
+    ${campoValor('guardado', m?.guardado || null, 'Já guardado fora do app (opcional)')}
+    ${campoDono(m && L.donoDe(m))}
+    <p class="ajuda">O valor mensal aparece em Contas todo mês, como "Meta: nome". Ao marcar como paga, ele soma no progresso.</p>
+    <p class="erro" role="alert" hidden></p>
+    <div class="acoes">
+      ${m ? `<button type="button" class="btn perigo" data-acao="excluir-meta" data-id="${esc(m.id)}">Excluir</button>` : ''}
+      <button type="button" class="btn" data-acao="fechar">Cancelar</button>
+      <button class="btn primario">Salvar</button>
+    </div>
+  </form>`);
 }
 
 function formRec(r) {
@@ -512,6 +639,7 @@ function formRec(r) {
     <label data-so-anual ${r?.tipo === 'anual' ? '' : 'hidden'}>Mês<select name="mes">
       ${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${Number(r?.mes) === i + 1 ? 'selected' : ''}>${L.nomeMesNum(i + 1)}</option>`).join('')}
     </select></label>
+    <label class="marcar"><input type="checkbox" name="variavel" ${r?.variavel ? 'checked' : ''}><span>O valor muda todo mês (luz, água). O app pede o valor certo na hora de pagar.</span></label>
     ${campoCategoria(r?.categoria)}
     ${campoDono(r && L.donoDe(r))}
     <p class="erro" role="alert" hidden></p>
@@ -535,6 +663,7 @@ function formParc(p) {
       <label>Total de parcelas<input name="total" type="number" inputmode="numeric" min="1" max="360" required value="${p?.total || ''}"></label>
     </div>
     <label>Dia do vencimento<input name="dia" type="number" inputmode="numeric" min="1" max="31" required value="${p?.dia || ''}"></label>
+    <label class="marcar"><input type="checkbox" name="naFatura" ${p?.naFatura ? 'checked' : ''}><span>Já vem dentro da fatura do cartão. Não cria uma conta separada, para não contar duas vezes.</span></label>
     ${campoCategoria(p?.categoria || 'Cartão')}
     ${campoDono(p && L.donoDe(p))}
     <p class="erro" role="alert" hidden></p>
@@ -585,14 +714,10 @@ const acoes = {
   pagar: (el) => {
     const c = acharConta(el.dataset.id);
     if (!c) return;
-    const pago = !c.pago;
-    store.gravar('contas', c.id, {
-      ...L.paraGravar(c), pago,
-      pagoEm: pago ? L.hojeStr() : null,
-      pagoPor: pago ? ui.user.email : null,
-      pagoPorUid: pago ? ui.user.uid : null,
-    }, erroGravar);
-    if (pago) toast(`${c.nome}: marcada como paga`);
+    if (c.pago) return marcarPaga(c, false);
+    const variavel = c.origem === 'recorrente' && ui.dados.recorrentes.find((r) => r.id === c.origemId)?.variavel;
+    if (variavel) return formPagar(c);
+    marcarPaga(c, true);
   },
 
   'nova-conta': () => formConta(null),
@@ -662,6 +787,18 @@ const acoes = {
     toast('Lembretes desativados neste celular');
   },
 
+  'nova-meta': () => formMeta(null),
+  'editar-meta': (el) => formMeta(ui.dados.metas.find((m) => m.id === el.dataset.id)),
+  'excluir-meta': (el) => {
+    const m = ui.dados.metas.find((x) => x.id === el.dataset.id);
+    if (!m || !confirm(`Excluir a meta "${m.nome}"? Os depósitos já marcados continuam no histórico das contas.`)) return;
+    store.apagar('metas', m.id, erroGravar);
+    fecharSheet();
+  },
+  'inicio-vista': (el) => { ui.inicioVista = el.dataset.vista; render(); },
+  'ir-plano': () => { ui.aba = 'plano'; render(); window.scrollTo(0, 0); },
+  divisao: (el) => { store.gravar('config', 'geral', { divisao: el.dataset.modo }, erroGravar); },
+
   'nova-rec': () => formRec(null),
   'editar-rec': (el) => formRec(ui.dados.recorrentes.find((r) => r.id === el.dataset.id)),
   'excluir-rec': (el) => {
@@ -721,14 +858,6 @@ const envios = {
     toast('Nome salvo');
   },
 
-  renda: (form) => {
-    const txt = new FormData(form).get('renda');
-    const renda = txt.trim() === '' ? 0 : L.parseValor(txt);
-    if (renda === null) return toast('Valor inválido. Exemplo: 5.500,00');
-    store.gravar('config', 'geral', { renda }, erroGravar);
-    toast('Renda salva');
-  },
-
   conta: (form) => {
     const lido = lerForm(form);
     if (!lido) return;
@@ -757,7 +886,10 @@ const envios = {
       descricao: (f.descricao || '').trim() || categoria, valor, categoria, dono: f.dono || 'casa',
       data: f.data, mes: f.data.slice(0, 7),
       criadoEm: antigo?.criadoEm || Date.now(), criadoPor: antigo?.criadoPor || ui.user.email,
+      pagamento: f.pagamento === 'cartao' ? 'cartao' : 'avista',
+      pagoPorUid: antigo ? (antigo.pagoPorUid || null) : ui.user.uid,   // quem lança é quem pagou
     }, erroGravar);
+    gravarLocal('pagamento', f.pagamento === 'cartao' ? 'cartao' : 'avista');
     if (!antigo) toast(`Gasto de ${L.fmtValor(valor)} anotado`);
     if (f.data.slice(0, 7) !== ui.mes) { ui.mes = f.data.slice(0, 7); render(); }
     fecharSheet();
@@ -771,12 +903,50 @@ const envios = {
     toast(limiteGastos ? 'Limite salvo' : 'Limite removido');
   },
 
+  pagar: (form) => {
+    const c = acharConta(form.dataset.id);
+    const valor = L.parseValor(new FormData(form).get('valor'));
+    if (!c) return fecharSheet();
+    if (valor === null) { const p = form.querySelector('.erro'); p.textContent = 'Informe o valor pago, por exemplo 129,90.'; p.hidden = false; return; }
+    marcarPaga(c, true, valor);
+    fecharSheet();
+  },
+
+  meta: (form) => {
+    const f = Object.fromEntries(new FormData(form));
+    const erro = (msg) => { const p = form.querySelector('.erro'); p.textContent = msg; p.hidden = false; };
+    const nome = (f.nome || '').trim();
+    if (!nome) return erro('Dê um nome para a meta.');
+    const alvo = L.parseValor(f.alvo);
+    if (!alvo) return erro('Informe quanto querem juntar, por exemplo 5.000,00.');
+    const mensal = f.mensal.trim() === '' ? 0 : L.parseValor(f.mensal);
+    const guardado = f.guardado.trim() === '' ? 0 : L.parseValor(f.guardado);
+    if (mensal === null || guardado === null) return erro('Confira os valores. Exemplo: 300,00.');
+    const dia = Number(f.dia) || 5;
+    if (!Number.isInteger(dia) || dia < 1 || dia > 31) return erro('O dia vai de 1 a 31.');
+    const antiga = ui.dados.metas.find((m) => m.id === form.dataset.id);
+    store.gravar('metas', antiga ? antiga.id : store.novoId('metas'),
+      { nome, alvo, mensal, guardado, dia, dono: f.dono || 'casa', desde: antiga?.desde || mesAtual() }, erroGravar);
+    fecharSheet();
+  },
+
+  rendas: (form) => {
+    const rendas = {};
+    for (const [campo, txt] of new FormData(form)) {
+      const v = txt.trim() === '' ? 0 : L.parseValor(txt);
+      if (v === null) return toast('Valor inválido. Exemplo: 3.500,00');
+      rendas[campo.replace('renda_', '')] = v;
+    }
+    store.gravar('config', 'geral', { rendas }, erroGravar);
+    toast('Renda salva');
+  },
+
   rec: (form) => {
     const lido = lerForm(form);
     if (!lido) return;
     const { f, out } = lido;
     const antiga = ui.dados.recorrentes.find((r) => r.id === form.dataset.id);
-    const dados = { ...out, tipo: f.tipo === 'anual' ? 'anual' : 'mensal', mes: f.tipo === 'anual' ? Number(f.mes) : null,
+    const dados = { ...out, variavel: f.variavel === 'on', tipo: f.tipo === 'anual' ? 'anual' : 'mensal', mes: f.tipo === 'anual' ? Number(f.mes) : null,
       desde: antiga?.desde || mesAtual() };
     store.gravar('recorrentes', antiga ? antiga.id : store.novoId('recorrentes'), dados, erroGravar);
     fecharSheet();
@@ -790,7 +960,7 @@ const envios = {
     if (!Number.isInteger(total) || total < 1 || total > 360) return erro('Informe o total de parcelas.');
     if (!Number.isInteger(atual) || atual < 1 || atual > total) return erro(`A parcela deste mês vai de 1 a ${total}.`);
     const antiga = ui.dados.parcelamentos.find((p) => p.id === form.dataset.id);
-    const dados = { nome: out.nome, valorParcela: out.valor, categoria: out.categoria, dono: out.dono, dia: out.dia, total,
+    const dados = { nome: out.nome, valorParcela: out.valor, categoria: out.categoria, dono: out.dono, dia: out.dia, total, naFatura: f.naFatura === 'on',
       inicio: L.somaMes(mesAtual(), -(atual - 1)), desde: antiga?.desde || mesAtual() };
     store.gravar('parcelamentos', antiga ? antiga.id : store.novoId('parcelamentos'), dados, erroGravar);
     fecharSheet();
@@ -873,8 +1043,11 @@ store.onAuth((user) => {
     pararEscuta = store.subscribe(
       (dados) => {
         const primeira = !ui.dados;
-        ui.dados = { gastos: [], ...dados };
-        if (primeira) {   // parcelamentos criados antes de existir o campo "desde"
+        ui.dados = { gastos: [], metas: [], ...dados };
+        if (primeira) {
+          // renda única antiga passa a ser a renda de quem abriu o app primeiro
+          if (dados.config.renda && !dados.config.rendas) store.gravar('config', 'geral', { rendas: { [user.uid]: dados.config.renda } }, erroGravar);
+          // parcelamentos criados antes de existir o campo "desde"
           for (const p of dados.parcelamentos) if (!p.desde) store.gravar('parcelamentos', p.id, { desde: mesAtual() }, erroGravar);
         }
         if (!dados.config.pessoas?.[user.uid] && !registrou) {   // primeira vez neste aparelho/conta

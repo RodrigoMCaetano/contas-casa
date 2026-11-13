@@ -198,3 +198,102 @@ test('categorias e gráficos', () => {
   assert.match(L.fmtCompacto(345000), /^R\$ 3,5 mil$/);
   assert.equal(L.fmtCompacto(85000), 'R$ 850');
 });
+
+test('renda por pessoa, divisão e parte de cada um', () => {
+  assert.equal(L.rendaCasa({ renda: 5000 }), 5000, 'renda única antiga');
+  assert.equal(L.rendaCasa({ renda: 5000, rendas: { a: 6000, b: 4000 } }), 10000);
+  assert.equal(L.rendaCasa({}), 0);
+  const uids = ['a', 'b'];
+  assert.equal(L.cota({}, 'a', uids), 0.5);
+  assert.equal(L.cota({ divisao: 'proporcional', rendas: { a: 6000, b: 4000 } }, 'a', uids), 0.6);
+  assert.equal(L.cota({ divisao: 'proporcional' }, 'a', uids), 0.5, 'sem rendas, divide igual');
+  assert.equal(L.cota({}, 'x', uids), 0);
+  const lista = [{ valor: 1000 }, { valor: 300, dono: 'a' }, { valor: 200, dono: 'b' }];
+  assert.equal(L.parteDe(lista, 'a', 0.6), 900);
+  assert.equal(L.parteDe(lista, 'b', 0.4), 600);
+});
+
+test('quanto dá para gastar hoje', () => {
+  // dia 21 de novembro: faltam 10 dias contando hoje
+  const base = { renda: 500000, contas: 300000, gastosAVista: 100000, gastosHoje: 0, hoje: '2026-11-21' };
+  assert.deepEqual(L.podeGastar(base), { livre: 100000, dias: 10, porDia: 10000, hoje: 10000, noVermelho: false });
+  // gastar 40 hoje não muda a cota do dia, só o que resta dela
+  assert.deepEqual(L.podeGastar({ ...base, gastosAVista: 104000, gastosHoje: 4000 }), { livre: 96000, dias: 10, porDia: 10000, hoje: 6000, noVermelho: false });
+  // passou da cota do dia
+  assert.equal(L.podeGastar({ ...base, gastosAVista: 115000, gastosHoje: 15000 }).hoje, 0);
+  const vermelho = L.podeGastar({ ...base, gastosAVista: 250000 });
+  assert.equal(vermelho.noVermelho, true); assert.equal(vermelho.hoje, 0); assert.equal(vermelho.livre, -50000);
+  assert.equal(L.podeGastar({ ...base, hoje: '2026-11-30' }).dias, 1);
+  assert.equal(L.podeGastar({ ...base, renda: 0 }), null);
+});
+
+test('cartão, parcelas na fatura e metas', () => {
+  assert.equal(L.aVista({}), true); assert.equal(L.aVista({ pagamento: 'cartao' }), false);
+  const d = {
+    parcelamentos: [
+      { id: 'tv', nome: 'TV', valorParcela: 20000, dia: 8, total: 10, inicio: '2026-11', naFatura: true },
+      { id: 'so', nome: 'Sofá', valorParcela: 10000, dia: 8, total: 3, inicio: '2026-11' },
+    ],
+    recorrentes: [{ id: 'ip', nome: 'IPVA', valor: 120000, dia: 20, tipo: 'anual', mes: 1 }],
+    metas: [{ id: 'r', nome: 'Reserva', alvo: 100000, mensal: 30000, dia: 5, guardado: 20000, desde: '2026-11' }],
+    contas: [
+      { id: 'm_r_2026-11', nome: 'Meta: Reserva', valor: 30000, mes: '2026-11', venc: '2026-11-05', pago: true, origem: 'meta', origemId: 'r' },
+      { id: 'm_r_2026-12', nome: 'Meta: Reserva', valor: 50000, mes: '2026-12', venc: '2026-12-05', pago: true, origem: 'meta', origemId: 'r' },
+    ],
+  };
+  assert.deepEqual(L.contasDoMes(d, '2026-11').map((c) => c.id), ['m_r_2026-11', 'p_so_1'], 'parcela na fatura não vira conta');
+  assert.equal(L.parcelasDoMes(d, '2026-11'), 30000, 'mas conta no total de parcelas');
+  assert.equal(L.parcelasDoMes(d, '2027-03'), 20000);
+  assert.equal(L.totalAnuais(d.recorrentes), 120000);
+  assert.equal(L.guardadoMeta(d, d.metas[0]), 100000);
+  assert.equal(L.contasDoMes(d, '2026-10').some((c) => c.origem === 'meta'), false, 'antes de criar a meta');
+  assert.equal(L.contasDoMes(d, '2027-01').some((c) => c.origem === 'meta'), false, 'meta atingida para de gerar');
+  const aberta = { ...d, contas: [d.contas[0]] };
+  const jan = L.contasDoMes(aberta, '2027-01').find((c) => c.origem === 'meta');
+  assert.deepEqual([jan.id, jan.nome, jan.valor, jan.categoria], ['m_r_2027-01', 'Meta: Reserva', 30000, 'Metas']);
+});
+
+test('acerto de contas do casal', () => {
+  const d = {
+    contas: [
+      { id: '1', nome: 'Aluguel', valor: 100000, mes: '2026-11', venc: '2026-11-10', pago: true, pagoPorUid: 'a' },
+      { id: '2', nome: 'Luz', valor: 20000, mes: '2026-11', venc: '2026-11-15', pago: true, pagoPorUid: 'b' },
+      { id: '3', nome: 'Só do A', valor: 9999, mes: '2026-11', venc: '2026-11-15', pago: true, pagoPorUid: 'a', dono: 'a' },
+      { id: '4', nome: 'Não paga', valor: 5000, mes: '2026-11', venc: '2026-11-20' },
+      { id: '5', nome: 'Paga sem saber por quem', valor: 7000, mes: '2026-11', venc: '2026-11-20', pago: true },
+    ],
+    gastos: [{ id: 'g', descricao: 'Mercado', valor: 30000, data: '2026-11-03', mes: '2026-11', pagoPorUid: 'b' }],
+  };
+  // dos dois: 1500 no total; A pagou 1000, B pagou 500; meio a meio = 750 cada
+  assert.deepEqual(L.acerto(d, '2026-11', ['a', 'b'], {}),
+    { total: 150000, pagos: { a: 100000, b: 50000 }, credor: 'a', devedor: 'b', valor: 25000 });
+  // proporcional 60/40: A deveria pagar 900, pagou 1000 -> B deve 100
+  assert.equal(L.acerto(d, '2026-11', ['a', 'b'], { divisao: 'proporcional', rendas: { a: 6000, b: 4000 } }).valor, 10000);
+  // proporcional 80/20: A deveria pagar 1200, pagou 1000 -> A deve 200
+  const inv = L.acerto(d, '2026-11', ['a', 'b'], { divisao: 'proporcional', rendas: { a: 8000, b: 2000 } });
+  assert.deepEqual([inv.devedor, inv.credor, inv.valor], ['a', 'b', 20000]);
+  assert.equal(L.acerto(d, '2026-10', ['a', 'b'], {}), null);
+  assert.equal(L.acerto(d, '2026-11', ['a'], {}), null);
+});
+
+test('avisos da semana e de fechamento', () => {
+  assert.equal(L.somaDias('2026-11-02', -7), '2026-10-26');
+  assert.equal(L.somaDias('2026-12-31', 1), '2027-01-01');
+  assert.equal(L.diaDaSemana('2026-11-16'), 1);
+  const d = { gastos: [
+    { descricao: 'A', valor: 5000, data: '2026-11-09', mes: '2026-11', categoria: 'Mercado' },
+    { descricao: 'B', valor: 2000, data: '2026-11-15', mes: '2026-11', categoria: 'Lazer', dono: 'u1' },
+    { descricao: 'Da outra pessoa', valor: 9000, data: '2026-11-12', mes: '2026-11', categoria: 'Lazer', dono: 'u2' },
+    { descricao: 'Hoje não entra', valor: 800, data: '2026-11-16', mes: '2026-11', categoria: 'Lazer' },
+    { descricao: 'Velho', valor: 800, data: '2026-11-08', mes: '2026-11', categoria: 'Lazer' },
+    { descricao: 'Outubro', valor: 10000, data: '2026-10-08', mes: '2026-10', categoria: 'Lazer' },
+  ] };
+  const s = L.resumoSemana(d, '2026-11-16', 'u1');
+  assert.match(s.titulo, /^Semana: R\$\s70,00 em gastos do dia a dia$/);
+  assert.match(s.corpo, /^2 lançamentos\. Maior categoria: Mercado \(R\$\s50,00\)\.$/);
+  assert.equal(L.resumoSemana({ gastos: [] }, '2026-11-16', 'u1'), null);
+  const f = L.fechamento(d, '2026-12-01');
+  assert.match(f.titulo, /^Novembro fechou em R\$\s176,00$/);
+  assert.match(f.corpo, /76% a mais que no mês anterior\.$/);
+  assert.equal(L.fechamento({ gastos: [] }, '2026-12-01'), null);
+});

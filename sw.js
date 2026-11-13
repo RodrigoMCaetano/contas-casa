@@ -1,6 +1,6 @@
 // Guarda os arquivos do app para abrir sem internet.
 // Os dados ficam por conta do cache offline do próprio Firestore.
-const CACHE = 'contas-casa-v5';
+const CACHE = 'contas-casa-v6';
 const ARQUIVOS = ['./', 'index.html', 'style.css', 'app.js', 'logic.js', 'store-firebase.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -57,7 +57,7 @@ self.addEventListener('push', (ev) => {
   const titulo = p.data?.title || p.notification?.title || 'Contas da Casa';
   const corpo = p.data?.body || p.notification?.body || 'Você tem contas para conferir.';
   ev.waitUntil(self.registration.showNotification(titulo, {
-    body: corpo, icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', tag: 'lembrete-contas',
+    body: corpo, icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', tag: p.data?.tag || 'lembrete-contas',
   }));
 });
 

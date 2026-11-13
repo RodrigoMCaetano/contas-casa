@@ -4,11 +4,19 @@ App de celular (PWA) para acompanhar as contas da casa: o que vence no mês, o q
 
 ## Telas
 
-- **Início**: sobra do mês, próximos vencimentos, atalhos para lançar gasto ou conta e gráficos (saídas por mês e por categoria).
-- **Contas**: contas do mês por vencimento, com total, pago e falta pagar.
-- **Gastos**: compras do dia a dia (lanche, mercado, combustível), por dia e por categoria, com limite mensal opcional.
-- **Planejar**: contas fixas, parcelamentos e quanto já está comprometido nos próximos 12 meses.
-- **Mais**: lembrete de vencimento, renda, limite de gastos, categorias próprias, seu nome, backup e sair.
+- **Início**: quanto ainda dá para gastar hoje, próximos vencimentos, metas e o acerto do mês entre o casal. A vista **Gráficos** mostra as saídas por mês e por categoria.
+- **Contas**: contas do mês por vencimento, com total, pago, falta pagar e a sobra (da casa ou de cada um).
+- **Gastos**: compras do dia a dia, por dia e por categoria, com limite mensal opcional. Gasto no cartão de crédito fica registrado, mas não desconta do mês: ele chega na fatura.
+- **Planejar**: metas, contas fixas, parcelamentos e quanto já está comprometido nos próximos 12 meses.
+- **Mais**: renda de cada um, divisão das despesas dos dois, lembretes, limite de gastos, categorias, nome, backup e sair.
+
+## Como os números são calculados
+
+- **Hoje ainda dá para gastar**: renda da casa, menos contas e metas do mês, menos gastos à vista, dividido pelos dias que faltam. O que já foi gasto hoje sai da cota do dia.
+- **Metas**: o valor mensal vira uma conta ("Meta: nome"). Ao marcar como paga, soma no progresso.
+- **Acerto do mês**: considera as despesas "dos dois" em que se sabe quem pagou (quem marcou a conta como paga ou lançou o gasto) e a divisão escolhida em Mais (partes iguais ou proporcional à renda).
+- **Cartão de crédito**: lance a fatura como uma conta de quem é o cartão. Parcelas marcadas como "na fatura" não geram conta separada.
+- **Conta fixa de valor variável** (luz, água): o app pede o valor real ao marcar como paga.
 
 Cada item é de uma pessoa ou dos dois, e o filtro no topo vale para Contas, Gastos e Planejar. Segurar o ícone do app no Android mostra os atalhos **Novo gasto** e **Nova conta**.
 
@@ -22,7 +30,7 @@ Cada item é de uma pessoa ou dos dois, e o filtro no topo vale para Contas, Gas
 
 ## Lembrete de vencimento
 
-Todo dia, por volta das 8h (horário de Brasília), o GitHub Actions roda `scripts/lembretes.mjs`, que lê as contas no Firestore e envia uma notificação aos celulares que ativaram o lembrete em **Mais**. Só chega aviso quando há conta vencendo hoje, amanhã ou atrasada.
+Todo dia, por volta das 8h (horário de Brasília), o GitHub Actions roda `scripts/lembretes.mjs`, que lê as contas no Firestore e envia uma notificação aos celulares que ativaram o lembrete em **Mais**. Só chega aviso quando há conta vencendo hoje, amanhã ou atrasada. Às segundas vai também um resumo dos gastos da semana, e no dia 1º o fechamento do mês anterior.
 
 - Precisa do segredo `FIREBASE_SERVICE_ACCOUNT` em **Settings → Secrets and variables → Actions**, com o conteúdo do arquivo de chave da conta de serviço do Firebase. Essa chave dá acesso total ao projeto: nunca a coloque no código.
 - Para testar, abra a aba **Actions → Lembrete de vencimento → Run workflow** com a opção de teste marcada.

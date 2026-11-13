@@ -24,9 +24,9 @@ initializeApp({ credential: cert(conta) });
 const db = getFirestore();
 
 const ler = async (col) => (await db.collection(col).get()).docs.map((d) => ({ id: d.id, ...d.data() }));
-const [contas, recorrentes, parcelamentos, dispositivos] = await Promise.all(
-  ['contas', 'recorrentes', 'parcelamentos', 'dispositivos'].map(ler));
-const dados = { contas, recorrentes, parcelamentos };
+const [contas, recorrentes, parcelamentos, metas, gastos, dispositivos] = await Promise.all(
+  ['contas', 'recorrentes', 'parcelamentos', 'metas', 'gastos', 'dispositivos'].map(ler));
+const dados = { contas, recorrentes, parcelamentos, metas, gastos };
 
 // "Hoje" no horário de Brasília, não no do servidor.
 const hoje = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
@@ -34,24 +34,39 @@ const mes = hoje.slice(0, 7);
 const lista = [...L.contasDoMes(dados, L.somaMes(mes, -1)), ...L.contasDoMes(dados, mes),
   ...(hoje.slice(8) >= '28' ? L.contasDoMes(dados, L.somaMes(mes, 1)) : [])]; // fim do mês: "amanhã" pode ser dia 1º
 
+// Avisos do dia para uma pessoa: vencimentos (todo dia), resumo da semana (segunda) e fechamento (dia 1º).
+function avisosDe(uid) {
+  if (teste) return [{ titulo: 'Teste de lembrete', corpo: 'As notificações do Contas da Casa estão funcionando.', tag: 'teste' }];
+  const avisos = [];
+  const venc = L.lembrete(lista, hoje, uid);
+  if (venc) avisos.push({ ...venc, tag: 'lembrete-contas' });
+  const semana = L.diaDaSemana(hoje) === 1 && L.resumoSemana(dados, hoje, uid);
+  if (semana) avisos.push({ ...semana, tag: 'resumo-semana' });
+  const fecho = hoje.slice(8) === '01' && L.fechamento(dados, hoje);
+  if (fecho) avisos.push({ ...fecho, tag: 'fechamento-mes' });
+  return avisos;
+}
+
 let enviadas = 0, semAviso = 0, removidos = 0, falhas = 0;
 for (const d of dispositivos) {
-  const aviso = teste
-    ? { titulo: 'Teste de lembrete', corpo: 'As notificações do Contas da Casa estão funcionando.' }
-    : L.lembrete(lista, hoje, d.uid);
-  if (!aviso) { semAviso++; continue; }
-  try {
-    await getMessaging().send({
-      token: d.id,
-      data: { title: aviso.titulo, body: aviso.corpo },
-      webpush: { headers: { Urgency: 'high', TTL: '43200' } },
-    });
-    enviadas++;
-  } catch (e) {
-    if (['messaging/registration-token-not-registered', 'messaging/invalid-argument'].includes(e.code)) {
-      await db.collection('dispositivos').doc(d.id).delete();   // app desinstalado ou registro vencido
-      removidos++;
-    } else { falhas++; console.error('Falha no envio:', e.code || 'erro desconhecido'); }
+  const avisos = avisosDe(d.uid);
+  if (!avisos.length) { semAviso++; continue; }
+  for (const aviso of avisos) {
+    try {
+      await getMessaging().send({
+        token: d.id,
+        data: { title: aviso.titulo, body: aviso.corpo, tag: aviso.tag },
+        webpush: { headers: { Urgency: 'high', TTL: '43200' } },
+      });
+      enviadas++;
+    } catch (e) {
+      if (['messaging/registration-token-not-registered', 'messaging/invalid-argument'].includes(e.code)) {
+        await db.collection('dispositivos').doc(d.id).delete();   // app desinstalado ou registro vencido
+        removidos++;
+        break;
+      }
+      falhas++; console.error('Falha no envio:', e.code || 'erro desconhecido');
+    }
   }
 }
 console.log(`Aparelhos: ${dispositivos.length} | enviadas: ${enviadas} | sem nada a avisar: ${semAviso} | registros removidos: ${removidos} | falhas: ${falhas}`);
