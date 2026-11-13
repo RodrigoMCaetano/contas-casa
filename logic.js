@@ -89,7 +89,10 @@ export function recorrenteValeNoMes(r, mes) {
   return true;
 }
 
+// `desde` = mês em que o parcelamento foi cadastrado no app: parcelas anteriores a ele
+// não viram contas (senão apareceriam como atrasadas logo no primeiro uso).
 export function parcelaNoMes(p, mes) {
+  if (p.desde && mes < p.desde) return 0;
   const n = diffMeses(p.inicio, mes) + 1;
   return n >= 1 && n <= p.total ? n : 0;
 }
@@ -252,4 +255,55 @@ export function lembrete(contas, hoje, uid) {
   const corpo = itens.slice(0, 3).map((c) => `${c.nome} ${fmtValor(c.valor)}`).join(' · ')
     + (itens.length > 3 ? ` · e mais ${itens.length - 3}` : '');
   return { titulo: partes.join(' · '), corpo };
+}
+
+// ---------- Categorias e gráficos ----------
+
+// Categorias padrão do tipo ('conta' ou 'gasto') + as criadas pela casa, com "Outros" por último.
+export function categoriasDe(tipo, config = {}, atual) {
+  const base = tipo === 'gasto' ? CATEGORIAS_GASTO : CATEGORIAS;
+  const lista = [...base.filter((c) => c !== 'Outros'), ...(config.categoriasExtras || [])];
+  if (atual && atual !== 'Outros') lista.push(atual);          // categoria antiga que saiu da lista
+  const vistos = new Set();
+  return [...lista.filter((c) => { const k = c.toLowerCase(); return vistos.has(k) ? false : vistos.add(k); }), 'Outros'];
+}
+
+// Devolve o nome já existente (se houver) ou o novo nome limpo; null se vazio.
+export function normalizarCategoria(nome, existentes) {
+  const limpo = String(nome ?? '').trim().replace(/\s+/g, ' ').slice(0, 20);
+  if (!limpo) return null;
+  return existentes.find((c) => c.toLowerCase() === limpo.toLowerCase()) || limpo[0].toUpperCase() + limpo.slice(1);
+}
+
+// Saídas dos últimos n meses terminando em mesFinal: [{ mes, contas, gastos, total }].
+export function serieMeses(dados, mesFinal, n) {
+  return Array.from({ length: n }, (_, i) => {
+    const mes = somaMes(mesFinal, i - n + 1);
+    const contas = somar(contasDoMes(dados, mes));
+    const gastos = somar(gastosDoMes(dados, mes));
+    return { mes, contas, gastos, total: contas + gastos };
+  });
+}
+
+// Contas e gastos do mês somados por categoria, da maior para a menor.
+export function saidasPorCategoria(dados, mes) {
+  return porCategoria([...contasDoMes(dados, mes), ...gastosDoMes(dados, mes)]);
+}
+
+// Eixo com números redondos: { topo, marcas } em centavos (de 2 a 4 marcas).
+export function escala(max) {
+  if (!(max > 0)) return { topo: 10000, marcas: [5000, 10000] };
+  const alvo = max / 4;
+  const pot = 10 ** Math.floor(Math.log10(alvo));
+  const passo = [1, 2, 5, 10].find((m) => m * pot >= alvo) * pot;
+  const topo = Math.ceil(max / passo) * passo;
+  const marcas = [];
+  for (let v = passo; v <= topo + 1e-6; v += passo) marcas.push(Math.round(v));
+  return { topo, marcas };
+}
+
+export function fmtCompacto(centavos) {
+  const v = (centavos || 0) / 100;
+  if (Math.abs(v) >= 1000) return `R$ ${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`;
+  return `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
 }

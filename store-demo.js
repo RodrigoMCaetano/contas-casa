@@ -1,5 +1,5 @@
 // Modo demonstração (abra com ?demo): dados de exemplo só na memória, nada é salvo.
-import { mesDe, somaMes, dataVenc, hojeStr } from './logic.js';
+import { mesDe, somaMes, dataVenc, hojeStr, contasDoMes, paraGravar } from './logic.js';
 
 const mes = mesDe(new Date());
 const dados = {
@@ -27,6 +27,11 @@ const dados = {
     { id: 'a1', nome: 'Revisão do carro', valor: 38000, mes, venc: dataVenc(mes, 25), categoria: 'Transporte', dono: 'demo', pago: false, origem: 'avulsa' },
   ],
 };
+
+// Meses anteriores aparecem como já pagos, para o exemplo ter histórico sem contas atrasadas.
+for (const m of [1, 2, 3, 4, 5]) {
+  dados.contas.push(...contasDoMes(dados, somaMes(mes, -m)).map((c) => ({ id: c.id, ...paraGravar(c), pago: true })));
+}
 
 let ouvinte = null;
 let n = 0;

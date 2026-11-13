@@ -1,6 +1,6 @@
 // Guarda os arquivos do app para abrir sem internet.
 // Os dados ficam por conta do cache offline do próprio Firestore.
-const CACHE = 'contas-casa-v4';
+const CACHE = 'contas-casa-v5';
 const ARQUIVOS = ['./', 'index.html', 'style.css', 'app.js', 'logic.js', 'store-firebase.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 

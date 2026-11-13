@@ -4,14 +4,13 @@ App de celular (PWA) para acompanhar as contas da casa: o que vence no mês, o q
 
 ## Telas
 
-- **Contas**: contas do mês por vencimento, com total, pago, falta pagar e sobra da renda.
-- **Filtro por dono**: cada conta é de uma pessoa ou dos dois; o filtro no topo vale para Mês, Futuro e Fixas.
+- **Início**: sobra do mês, próximos vencimentos, atalhos para lançar gasto ou conta e gráficos (saídas por mês e por categoria).
+- **Contas**: contas do mês por vencimento, com total, pago e falta pagar.
 - **Gastos**: compras do dia a dia (lanche, mercado, combustível), por dia e por categoria, com limite mensal opcional.
-- **Futuro**: quanto já está comprometido nos próximos 12 meses e os parcelamentos em andamento.
-- **Fixas**: contas que se repetem todo mês ou todo ano.
-- **Mais**: renda mensal, limite de gastos, seu nome, backup (exportar e restaurar) e sair.
+- **Planejar**: contas fixas, parcelamentos e quanto já está comprometido nos próximos 12 meses.
+- **Mais**: lembrete de vencimento, renda, limite de gastos, categorias próprias, seu nome, backup e sair.
 
-Segurar o ícone do app no Android mostra os atalhos **Novo gasto** e **Nova conta**.
+Cada item é de uma pessoa ou dos dois, e o filtro no topo vale para Contas, Gastos e Planejar. Segurar o ícone do app no Android mostra os atalhos **Novo gasto** e **Nova conta**.
 
 ## Como funciona
 

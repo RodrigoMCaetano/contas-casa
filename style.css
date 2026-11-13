@@ -195,3 +195,51 @@ dialog#sheet h2 { font-size: 1.15rem; margin-bottom: 14px; }
 .resumo.estourou .barra > * { background: #ffd0cb; }
 .resumo.estourou .limite { font-weight: 700; }
 .linha-botoes { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* Início e Planejar */
+:root { --serie-1: #2a78d6; --serie-2: #eb6834; }
+@media (prefers-color-scheme: dark) { :root { --serie-1: #3987e5; --serie-2: #d95926; } }
+.sub { color: var(--suave); font-size: .9rem; }
+.atalhos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.atalhos .btn { min-height: 52px; font-size: 1rem; }
+.secao.com-botao { display: flex; align-items: center; gap: 6px; }
+.secao.com-botao > button { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.secao.com-botao .link { color: var(--suave); font-size: .85rem; min-height: 32px; }
+.btn.pequeno { min-height: 40px; padding: 0 14px; font-size: .85rem; color: var(--texto); }
+.mais-itens { text-align: center; color: var(--suave); font-size: .85rem; margin-top: 8px; }
+.lista > li.total-linha { justify-content: space-between; padding: 12px 14px 12px 16px; font-size: .9rem; color: var(--suave); }
+.total-linha strong { color: var(--texto); font-variant-numeric: tabular-nums; }
+
+/* Gráfico de colunas */
+.grafico { margin: 0; }
+.graf-plot { position: relative; height: 170px; margin: 6px 0 0 0; }
+.graf-grade { position: absolute; left: 0; right: 0; border-top: 1px solid var(--linha); }
+.graf-grade span { position: absolute; left: 0; top: 2px; font-size: .68rem; color: var(--suave); font-variant-numeric: tabular-nums; }
+.graf-renda { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--suave); z-index: 1; pointer-events: none; }
+.graf-renda span { position: absolute; right: 0; bottom: 2px; font-size: .68rem; font-weight: 600; color: var(--suave); background: var(--cartao); padding: 0 4px; }
+.graf-colunas { position: absolute; inset: 0 0 0 64px; display: flex; align-items: stretch; border-bottom: 1px solid var(--suave); }
+.graf-colunas button { flex: 1; min-width: 0; background: none; border: 0; padding: 0; display: flex; align-items: flex-end; justify-content: center; border-radius: 8px 8px 0 0; }
+.graf-colunas button[aria-pressed="true"] { background: var(--verde-claro); }
+.graf-pilha { width: min(24px, 60%); display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+.graf-pilha i { display: block; min-height: 2px; }
+.graf-pilha i:first-child { border-radius: 4px 4px 0 0; }
+.s1 { background: var(--serie-1); } .s2 { background: var(--serie-2); }
+.graf-eixo { display: flex; margin-left: 64px; padding-top: 4px; }
+.graf-eixo span { flex: 1; text-align: center; font-size: .72rem; color: var(--suave); text-transform: lowercase; }
+.graf-eixo .sel { color: var(--texto); font-weight: 700; }
+.graf-leitura { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--linha); font-size: .85rem; color: var(--suave); }
+.graf-leitura b { flex-basis: 100%; color: var(--texto); }
+.graf-leitura strong { color: var(--texto); font-variant-numeric: tabular-nums; }
+.graf-leitura i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; }
+.graf-tabela { margin-top: 10px; font-size: .85rem; }
+.graf-tabela summary { color: var(--suave); min-height: 32px; display: flex; align-items: center; cursor: pointer; }
+.graf-tabela table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.graf-tabela th, .graf-tabela td { text-align: right; padding: 6px 0; border-top: 1px solid var(--linha); font-weight: 400; }
+.graf-tabela th:first-child { text-align: left; }
+.graf-tabela thead th { color: var(--suave); border-top: 0; }
+
+/* Categorias */
+.chip-nova { flex: none; min-height: 40px; padding: 0 14px; border-radius: 99px; border: 1px dashed var(--suave); background: none; color: var(--suave); font-size: .9rem; font-weight: 600; }
+.cats-extras { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.cats-extras li { display: flex; align-items: center; border: 1px solid var(--linha); border-radius: 99px; padding-left: 14px; font-size: .9rem; }
+.cats-extras button { width: 40px; height: 40px; border: 0; background: none; font-size: 1.2rem; color: var(--suave); }

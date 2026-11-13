@@ -67,6 +67,9 @@ test('fixa respeita início, fim, anual e mês pulado', () => {
   assert.equal(L.contasDoMes(dados, '2027-06').length, 1, 'parcelamento terminou em maio');
   assert.equal(L.fimParcelamento(dados.parcelamentos[0]), '2027-05');
   assert.equal(L.parcelaNoMes(dados.parcelamentos[0], '2026-07'), 0);
+  const novo = { ...dados.parcelamentos[0], desde: '2026-11' };
+  assert.equal(L.parcelaNoMes(novo, '2026-10'), 0, 'antes do cadastro não gera conta');
+  assert.equal(L.parcelaNoMes(novo, '2026-11'), 4);
 });
 
 test('status', () => {
@@ -168,4 +171,30 @@ test('lembrete de vencimento', () => {
   assert.match(L.lembrete(contas, '2026-11-26', 'u1').corpo, / · e mais 1$/);
   assert.equal(L.lembrete([contas[5]], hoje, 'u1'), null);
   assert.equal(L.lembrete([], hoje, 'u1'), null);
+});
+
+test('categorias e gráficos', () => {
+  assert.deepEqual(L.categoriasDe('gasto', { categoriasExtras: ['Pet', 'lazer'] }, 'Antiga'),
+    ['Alimentação', 'Mercado', 'Transporte', 'Lazer', 'Compras', 'Pet', 'Antiga', 'Outros']);
+  assert.equal(L.categoriasDe('conta').at(-1), 'Outros');
+  assert.equal(L.categoriasDe('conta', {}, 'Outros').filter((c) => c === 'Outros').length, 1);
+  assert.equal(L.normalizarCategoria('  pet  shop ', ['Lazer']), 'Pet shop');
+  assert.equal(L.normalizarCategoria('LAZER', ['Lazer']), 'Lazer');
+  assert.equal(L.normalizarCategoria('   ', []), null);
+  const d = {
+    recorrentes: [{ id: 'a', nome: 'Aluguel', valor: 100000, dia: 10, tipo: 'mensal', categoria: 'Moradia', desde: '2026-10' }],
+    contas: [{ id: 'x', nome: 'Avulsa', valor: 5000, mes: '2026-11', venc: '2026-11-20', categoria: 'Mercado', origem: 'avulsa' }],
+    gastos: [{ id: 'g', descricao: 'Feira', valor: 7000, data: '2026-11-03', mes: '2026-11', categoria: 'Mercado' }],
+  };
+  assert.deepEqual(L.serieMeses(d, '2026-11', 3), [
+    { mes: '2026-09', contas: 0, gastos: 0, total: 0 },
+    { mes: '2026-10', contas: 100000, gastos: 0, total: 100000 },
+    { mes: '2026-11', contas: 105000, gastos: 7000, total: 112000 },
+  ]);
+  assert.deepEqual(L.saidasPorCategoria(d, '2026-11'), [{ categoria: 'Moradia', total: 100000 }, { categoria: 'Mercado', total: 12000 }]);
+  assert.deepEqual(L.escala(112000), { topo: 150000, marcas: [50000, 100000, 150000] });
+  assert.deepEqual(L.escala(650000), { topo: 800000, marcas: [200000, 400000, 600000, 800000] });
+  assert.deepEqual(L.escala(0).marcas.length, 2);
+  assert.match(L.fmtCompacto(345000), /^R\$ 3,5 mil$/);
+  assert.equal(L.fmtCompacto(85000), 'R$ 850');
 });

@@ -21,7 +21,8 @@ function salvarFiltro(v) { try { localStorage.setItem('filtro', v); } catch { /*
 
 const ui = {
   user: undefined,          // undefined = verificando; null = deslogado
-  aba: 'mes',
+  aba: 'inicio',
+  grafMes: null,            // mês em destaque no gráfico (null = mês atual)
   mes: L.mesDe(new Date()),
   dados: null,
   erroLogin: '',
@@ -122,7 +123,7 @@ function telaMes() {
     </ul>` : ''}
   </section>
   ${lista.length === 0 ? `<div class="vazio"><p>Nenhuma conta ${f === 'tudo' ? '' : `de "${esc(nomeDono(f))}" `}em ${L.nomeMes(ui.mes)}.</p>
-     <p>Toque em <strong>+ Conta</strong> para lançar uma, ou cadastre suas contas fixas na aba <strong>Fixas</strong>.</p></div>` : ''}
+     <p>Toque em <strong>+ Conta</strong> para lançar uma, ou cadastre suas contas fixas na aba <strong>Planejar</strong>.</p></div>` : ''}
   ${abertas.length ? `<h2 class="secao">A pagar <span>${abertas.length}</span></h2>
      <ul class="lista">${abertas.map((c) => linhaConta(c, hoje)).join('')}</ul>` : ''}
   ${pagas.length ? `<h2 class="secao">Pagas <span>${pagas.length}</span></h2>
@@ -170,12 +171,7 @@ function telaGastos() {
   ${lista.length === 0 ? `<div class="vazio"><p>Nenhum gasto ${f === 'tudo' ? '' : `de "${esc(nomeDono(f))}" `}em ${L.nomeMes(ui.mes)}.</p>
     <p>Toque em <strong>+ Gasto</strong> para anotar lanche, mercado, combustível e outras compras do dia.</p></div>` : `
   <h2 class="secao">Por categoria</h2>
-  <section class="cartao"><ul class="proj cats">
-    ${cats.map((c) => `<li><div>
-      <span class="proj-mes">${esc(c.categoria)}</span>
-      <span class="proj-barra"><span style="width:${(c.total / cats[0].total) * 100}%"></span></span>
-      <span class="proj-valor">${L.fmtValor(c.total)}</span></div></li>`).join('')}
-  </ul></section>
+  <section class="cartao">${barrasCategoria(cats)}</section>
   ${L.porDia(lista).map((d) => `
   <h2 class="secao dia"><b>${L.rotuloDia(d.data, hoje)}</b><span>${L.fmtValor(d.total)}</span></h2>
   <ul class="lista">
@@ -188,26 +184,111 @@ function telaGastos() {
   <button class="fab" data-acao="novo-gasto">+ Gasto</button>`;
 }
 
-function telaFuturo() {
-  const proj = L.projecao(ui.dados, mesAtual(), 12, filtroAtual());
-  const max = Math.max(1, ...proj.map((p) => p.total));
-  const parcs = L.filtrar(ui.dados.parcelamentos, filtroAtual()).sort((a, b) => L.fimParcelamento(a).localeCompare(L.fimParcelamento(b)));
-  const ativos = parcs.filter((p) => L.fimParcelamento(p) >= mesAtual());
+// Colunas empilhadas (contas + gastos) dos últimos 6 meses. Tocar em um mês mostra os valores.
+function graficoMeses() {
+  const serie = L.serieMeses(ui.dados, mesAtual(), 6);
+  const renda = ui.dados.config.renda || 0;
+  const { topo, marcas } = L.escala(Math.max(renda, ...serie.map((m) => m.total)));
+  const sel = serie.find((m) => m.mes === ui.grafMes) || serie.at(-1);
+  const pct = (v) => `${(v / topo) * 100}%`;
   return `
-  <header class="topo simples"><h1>Próximos meses</h1></header>
-  ${chipsFiltro()}
-  <section class="cartao">
-    <p class="ajuda">Quanto já está comprometido em cada mês, somando fixas, parcelas e contas lançadas.</p>
-    <ul class="proj">
-      ${proj.map((p) => `
-      <li><button data-acao="ver-mes" data-mes="${p.mes}">
-        <span class="proj-mes">${L.nomeMes(p.mes, true)}</span>
-        <span class="proj-barra"><span style="width:${(p.total / max) * 100}%"></span></span>
-        <span class="proj-valor">${L.fmtValor(p.total)}</span>
-      </button></li>`).join('')}
-    </ul>
+  <figure class="grafico" aria-label="Saídas por mês: contas e gastos dos últimos 6 meses">
+    <div class="graf-plot">
+      ${marcas.map((v) => `<div class="graf-grade" style="bottom:${pct(v)}"><span>${L.fmtCompacto(v)}</span></div>`).join('')}
+      ${renda ? `<div class="graf-renda" style="bottom:${pct(renda)}"><span>Renda</span></div>` : ''}
+      <div class="graf-colunas">
+        ${serie.map((m) => `
+        <button data-acao="graf-mes" data-mes="${m.mes}" aria-pressed="${m.mes === sel.mes}"
+          aria-label="${L.nomeMes(m.mes)}: contas ${L.fmtValor(m.contas)}, gastos ${L.fmtValor(m.gastos)}, total ${L.fmtValor(m.total)}">
+          <span class="graf-pilha" style="height:${pct(m.total)}">
+            ${m.gastos ? `<i class="s2" style="flex:${m.gastos}"></i>` : ''}
+            ${m.contas ? `<i class="s1" style="flex:${m.contas}"></i>` : ''}
+          </span>
+        </button>`).join('')}
+      </div>
+    </div>
+    <div class="graf-eixo">${serie.map((m) => `<span class="${m.mes === sel.mes ? 'sel' : ''}">${L.nomeMes(m.mes, true).slice(0, 3)}</span>`).join('')}</div>
+    <figcaption class="graf-leitura">
+      <b>${L.nomeMes(sel.mes)}</b>
+      <span><i class="s1"></i>Contas <strong>${L.fmtValor(sel.contas)}</strong></span>
+      <span><i class="s2"></i>Gastos <strong>${L.fmtValor(sel.gastos)}</strong></span>
+      <span>Total <strong>${L.fmtValor(sel.total)}</strong></span>
+    </figcaption>
+    <details class="graf-tabela"><summary>Ver em tabela</summary>
+      <table><thead><tr><th>Mês</th><th>Contas</th><th>Gastos</th><th>Total</th></tr></thead><tbody>
+        ${serie.map((m) => `<tr><th>${L.nomeMes(m.mes, true)}</th><td>${L.fmtValor(m.contas)}</td><td>${L.fmtValor(m.gastos)}</td><td>${L.fmtValor(m.total)}</td></tr>`).join('')}
+      </tbody></table>
+    </details>
+  </figure>`;
+}
+
+function barrasCategoria(cats) {
+  return `<ul class="proj cats">
+    ${cats.map((c) => `<li><div>
+      <span class="proj-mes">${esc(c.categoria)}</span>
+      <span class="proj-barra"><span style="width:${(c.total / cats[0].total) * 100}%"></span></span>
+      <span class="proj-valor">${L.fmtValor(c.total)}</span></div></li>`).join('')}
+  </ul>`;
+}
+
+function telaInicio() {
+  const hoje = L.hojeStr();
+  const mes = mesAtual();
+  const doMes = L.contasDoMes(ui.dados, mes);
+  const gastos = L.somar(L.gastosDoMes(ui.dados, mes));
+  const r = L.resumo(doMes, ui.dados.config.renda, gastos);
+  const abertas = [...L.contasDoMes(ui.dados, L.somaMes(mes, -1)), ...doMes].filter((c) => !c.pago);
+  const cats = L.saidasPorCategoria(ui.dados, mes);
+  const nome = pessoas()[ui.user.uid];
+  return `
+  <header class="topo simples"><div><h1>${nome ? `Olá, ${esc(nome)}` : 'Olá'}</h1><p class="sub">${L.nomeMes(mes)}</p></div></header>
+  <section class="resumo" aria-label="Resumo do mês">
+    <p class="rotulo">${r.sobra === null ? 'Saídas do mês' : r.sobra < 0 ? 'Faltam para fechar o mês' : 'Sobra do mês'}</p>
+    <p class="destaque">${L.fmtValor(r.sobra === null ? r.total + gastos : Math.abs(r.sobra))}</p>
+    <dl>
+      <div><dt>Contas do mês</dt><dd>${L.fmtValor(r.total)}</dd></div>
+      <div><dt>Gastos</dt><dd>${L.fmtValor(gastos)}</dd></div>
+      <div><dt>Falta pagar</dt><dd>${L.fmtValor(r.falta)}</dd></div>
+    </dl>
+    ${r.sobra === null ? '<p class="limite"><button class="link" data-acao="ir-mais">Informar a renda para ver quanto sobra</button></p>' : ''}
   </section>
-  <h2 class="secao">Parcelamentos <span>${ativos.length}</span></h2>
+  <div class="atalhos">
+    <button class="btn primario" data-acao="novo-gasto">+ Gasto</button>
+    <button class="btn" data-acao="nova-conta">+ Conta</button>
+  </div>
+  <h2 class="secao com-botao">Próximos vencimentos<button class="link" data-acao="ir-contas">ver todas</button></h2>
+  ${abertas.length ? `<ul class="lista">${abertas.slice(0, 4).map((c) => linhaConta(c, hoje)).join('')}</ul>
+    ${abertas.length > 4 ? `<p class="mais-itens">e mais ${abertas.length - 4} em aberto</p>` : ''}`
+    : `<div class="vazio"><p>${doMes.length ? 'Tudo pago por aqui.' : 'Nenhuma conta neste mês ainda.'}</p></div>`}
+  <h2 class="secao">Saídas por mês</h2>
+  <section class="cartao">${graficoMeses()}</section>
+  ${cats.length ? `<h2 class="secao">Para onde foi o dinheiro em ${L.nomeMes(mes).split(' ')[0].toLowerCase()}</h2>
+  <section class="cartao"><p class="ajuda">Contas e gastos do mês, somados por categoria.</p>${barrasCategoria(cats)}</section>` : ''}`;
+}
+
+function telaPlano() {
+  const f = filtroAtual();
+  const proj = L.projecao(ui.dados, mesAtual(), 12, f);
+  const max = Math.max(1, ...proj.map((p) => p.total));
+  const ativos = L.filtrar(ui.dados.parcelamentos, f)
+    .filter((p) => L.fimParcelamento(p) >= mesAtual())
+    .sort((a, b) => L.fimParcelamento(a).localeCompare(L.fimParcelamento(b)));
+  const recs = L.filtrar(ui.dados.recorrentes, f).sort((a, b) => (a.dia - b.dia) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const mensal = recs.filter((r) => r.tipo !== 'anual').reduce((s, r) => s + (r.valor || 0), 0);
+  return `
+  <header class="topo simples"><h1>Planejar</h1></header>
+  ${chipsFiltro()}
+  <h2 class="secao com-botao">Contas fixas <span>${recs.length}</span><button class="btn pequeno" data-acao="nova-rec">+ Nova</button></h2>
+  ${recs.length === 0 ? '<div class="vazio"><p>Nenhuma conta fixa cadastrada.</p><p>Cadastre aluguel, internet, luz e assinaturas uma vez, e elas aparecem sozinhas todo mês.</p></div>' : `
+  <ul class="lista">
+    ${recs.map((r) => `
+    <li class="item"><button class="item-corpo" data-acao="editar-rec" data-id="${esc(r.id)}">
+      <span class="conta-nome">${esc(r.nome)}</span>
+      <span class="conta-meta">${r.tipo === 'anual' ? `Todo ano, em ${L.nomeMesNum(r.mes).toLowerCase()}, dia ${r.dia}` : `Todo mês, dia ${r.dia}`} · ${esc(r.categoria || 'Outros')} · ${esc(nomeDono(L.donoDe(r)))}</span>
+    </button><span class="conta-valor">${L.fmtValor(r.valor)}</span></li>`).join('')}
+    <li class="total-linha"><span>Fixas por mês</span><strong>${L.fmtValor(mensal)}</strong></li>
+  </ul>`}
+  <h2 class="secao com-botao">Parcelamentos <span>${ativos.length}</span><button class="btn pequeno" data-acao="novo-parc">+ Novo</button></h2>
   ${ativos.length === 0 ? '<div class="vazio"><p>Nenhum parcelamento em andamento.</p></div>' : `
   <ul class="lista">
     ${ativos.map((p) => {
@@ -221,28 +302,18 @@ function telaFuturo() {
       </button><span class="conta-valor">${L.fmtValor(p.valorParcela)}<small>/mês</small></span></li>`;
     }).join('')}
   </ul>`}
-  <button class="fab" data-acao="novo-parc">+ Parcelamento</button>`;
-}
-
-function telaFixas() {
-  const recs = L.filtrar(ui.dados.recorrentes, filtroAtual()).sort((a, b) => (a.dia - b.dia) || a.nome.localeCompare(b.nome, 'pt-BR'));
-  const mensal = recs.filter((r) => r.tipo !== 'anual').reduce((s, r) => s + (r.valor || 0), 0);
-  return `
-  <header class="topo simples"><h1>Contas fixas</h1></header>
-  ${chipsFiltro()}
+  <h2 class="secao">Próximos 12 meses</h2>
   <section class="cartao">
-    <p class="ajuda">Cadastre uma vez e a conta aparece sozinha todo mês. Se o valor mudar em um mês (como a luz), ajuste na própria conta do mês.</p>
-    <p class="total-fixas"><span>Fixas por mês</span><strong>${L.fmtValor(mensal)}</strong></p>
-  </section>
-  ${recs.length === 0 ? '<div class="vazio"><p>Nenhuma conta fixa cadastrada.</p><p>Comece por aluguel, internet, luz e assinaturas.</p></div>' : `
-  <ul class="lista">
-    ${recs.map((r) => `
-    <li class="item"><button class="item-corpo" data-acao="editar-rec" data-id="${esc(r.id)}">
-      <span class="conta-nome">${esc(r.nome)}</span>
-      <span class="conta-meta">${r.tipo === 'anual' ? `Todo ano, em ${L.nomeMesNum(r.mes).toLowerCase()}, dia ${r.dia}` : `Todo mês, dia ${r.dia}`} · ${esc(r.categoria || 'Outros')} · ${esc(nomeDono(L.donoDe(r)))}</span>
-    </button><span class="conta-valor">${L.fmtValor(r.valor)}</span></li>`).join('')}
-  </ul>`}
-  <button class="fab" data-acao="nova-rec">+ Conta fixa</button>`;
+    <p class="ajuda">Quanto já está comprometido em cada mês, somando fixas, parcelas e contas lançadas. Toque em um mês para abrir.</p>
+    <ul class="proj">
+      ${proj.map((p) => `
+      <li><button data-acao="ver-mes" data-mes="${p.mes}">
+        <span class="proj-mes">${L.nomeMes(p.mes, true)}</span>
+        <span class="proj-barra"><span style="width:${(p.total / max) * 100}%"></span></span>
+        <span class="proj-valor">${L.fmtValor(p.total)}</span>
+      </button></li>`).join('')}
+    </ul>
+  </section>`;
 }
 
 function secaoLembrete() {
@@ -286,6 +357,18 @@ function telaMais() {
     </form>
   </section>
   <section class="cartao">
+    <h2>Categorias</h2>
+    <p class="ajuda">Crie categorias próprias. Elas aparecem nas contas e nos gastos.</p>
+    ${(ui.dados.config.categoriasExtras || []).length ? `<ul class="cats-extras">
+      ${ui.dados.config.categoriasExtras.map((c) => `<li><span>${esc(c)}</span><button data-acao="remover-categoria" data-nome="${esc(c)}" aria-label="Remover ${esc(c)}">×</button></li>`).join('')}
+    </ul>` : ''}
+    <form data-form="categoria" class="linha-form">
+      <label class="sr" for="novacat">Nova categoria</label>
+      <input id="novacat" name="categoria" maxlength="20" placeholder="Ex.: Pet">
+      <button class="btn">Criar</button>
+    </form>
+  </section>
+  <section class="cartao">
     <h2>Seu nome</h2>
     <p class="ajuda">Aparece no filtro e nas contas que são só suas.</p>
     <form data-form="nome" class="linha-form">
@@ -310,13 +393,13 @@ function telaMais() {
   </section>`;
 }
 
-const ABAS = [['mes', 'Contas', '▤'], ['gastos', 'Gastos', '◎'], ['futuro', 'Futuro', '↗'], ['fixas', 'Fixas', '↻'], ['mais', 'Mais', '⋯']];
+const ABAS = [['inicio', 'Início', '⌂'], ['mes', 'Contas', '▤'], ['gastos', 'Gastos', '◎'], ['plano', 'Planejar', '↗'], ['mais', 'Mais', '⋯']];
 
 function render() {
   if (ui.user === undefined) { $app.innerHTML = '<p class="carregando">Carregando…</p>'; return; }
   if (ui.user === null) { $app.innerHTML = telaLogin(); return; }
   if (!ui.dados) { $app.innerHTML = '<p class="carregando">Carregando suas contas…</p>'; return; }
-  const tela = { mes: telaMes, gastos: telaGastos, futuro: telaFuturo, fixas: telaFixas, mais: telaMais }[ui.aba]();
+  const tela = { inicio: telaInicio, mes: telaMes, gastos: telaGastos, plano: telaPlano, mais: telaMais }[ui.aba]();
   $app.innerHTML = `
     ${store.demo ? '<p class="faixa">Modo demonstração: nada é salvo.</p>' : ''}
     ${!navigator.onLine ? '<p class="faixa">Sem internet. As alterações serão enviadas quando a conexão voltar.</p>' : ''}
@@ -334,8 +417,22 @@ const campoValor = (nome, valor, rotulo) => `
     <input name="${nome}" inputmode="decimal" required placeholder="0,00" value="${valor != null ? L.valorParaCampo(valor) : ''}"></div></label>`;
 const campoCategoria = (atual) => `
   <label>Categoria<select name="categoria">
-    ${L.CATEGORIAS.map((c) => `<option ${c === (atual || 'Outros') ? 'selected' : ''}>${c}</option>`).join('')}
+    ${L.categoriasDe('conta', ui.dados.config, atual).map((c) => `<option ${c === (atual || 'Outros') ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+    <option value="__nova">＋ Nova categoria…</option>
   </select></label>`;
+
+// Pergunta o nome, grava na lista da casa e devolve o nome final (ou null se cancelou).
+function criarCategoria() {
+  const extras = ui.dados.config.categoriasExtras || [];
+  const todas = [...new Set([...L.CATEGORIAS, ...L.CATEGORIAS_GASTO, ...extras])];
+  const nome = L.normalizarCategoria(prompt('Nome da nova categoria:'), todas);
+  if (!nome) return null;
+  if (!todas.includes(nome)) {
+    ui.dados.config.categoriasExtras = [...extras, nome];
+    store.gravar('config', 'geral', { categoriasExtras: ui.dados.config.categoriasExtras }, erroGravar);
+  }
+  return nome;
+}
 
 // Em item novo, sugere o dono do filtro que está ativo.
 const campoDono = (atual) => {
@@ -384,7 +481,8 @@ function formGasto(g) {
     <label>O que foi<input name="descricao" maxlength="60" list="sugestoes" autocomplete="off" value="${esc(g?.descricao || '')}" placeholder="Ex.: Lanche (opcional)"></label>
     <datalist id="sugestoes">${L.sugestoesGasto(ui.dados.gastos).map((s) => `<option value="${esc(s.descricao)}">`).join('')}</datalist>
     <fieldset class="dono-campo"><legend>Categoria</legend><div class="chips quebra">
-      ${L.CATEGORIAS_GASTO.map((c) => `<label><input type="radio" name="categoria" value="${c}" ${c === cat ? 'checked' : ''}><span>${c}</span></label>`).join('')}
+      ${L.categoriasDe('gasto', ui.dados.config, g?.categoria).map((c) => `<label><input type="radio" name="categoria" value="${esc(c)}" ${c === cat ? 'checked' : ''}><span>${esc(c)}</span></label>`).join('')}
+      <button type="button" class="chip-nova" data-acao="nova-categoria">＋ Nova</button>
     </div></fieldset>
     ${campoDono(g && L.donoDe(g))}
     <label>Dia<input name="data" type="date" required value="${data}" max="${L.hojeStr()}"></label>
@@ -465,7 +563,7 @@ function lerForm(form) {
 }
 
 function acharConta(id) {
-  for (const mes of new Set([ui.mes, mesAtual()])) {
+  for (const mes of new Set([ui.mes, mesAtual(), L.somaMes(mesAtual(), -1)])) {
     const c = L.contasDoMes(ui.dados, mes).find((x) => x.id === id);
     if (c) return c;
   }
@@ -475,7 +573,7 @@ function acharConta(id) {
 // ---------- Eventos ----------
 
 const acoes = {
-  aba: (el) => { ui.aba = el.dataset.aba; render(); window.scrollTo(0, 0); },
+  aba: (el) => { ui.aba = el.dataset.aba; if (ui.aba === 'inicio') ui.mes = mesAtual(); render(); window.scrollTo(0, 0); },
   'ir-mais': () => { ui.aba = 'mais'; render(); },
   'mes-ant': () => { ui.mes = L.somaMes(ui.mes, -1); render(); },
   'mes-prox': () => { ui.mes = L.somaMes(ui.mes, 1); render(); },
@@ -521,6 +619,27 @@ const acoes = {
     fecharSheet();
   },
   importar: () => document.getElementById('arquivo-backup').click(),
+
+  'nova-categoria': (el) => {
+    const nome = criarCategoria();
+    if (!nome) return;
+    const grupo = el.closest('.chips');
+    let radio = [...grupo.querySelectorAll('input')].find((r) => r.value === nome);
+    if (!radio) {
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="radio" name="categoria" value="${esc(nome)}"><span>${esc(nome)}</span>`;
+      grupo.insertBefore(label, el);
+      radio = label.firstChild;
+    }
+    radio.checked = true;
+  },
+  'remover-categoria': (el) => {
+    const nome = el.dataset.nome;
+    if (!confirm(`Remover a categoria "${nome}" da lista? O que já foi lançado com ela continua igual.`)) return;
+    store.gravar('config', 'geral', { categoriasExtras: (ui.dados.config.categoriasExtras || []).filter((c) => c !== nome) }, erroGravar);
+  },
+  'graf-mes': (el) => { ui.grafMes = el.dataset.mes; render(); },
+  'ir-contas': () => { ui.aba = 'mes'; ui.mes = mesAtual(); render(); window.scrollTo(0, 0); },
 
   'lembrete-on': async () => {
     ui.notifOcupado = true; render();
@@ -583,6 +702,16 @@ const envios = {
     try { await store.login(f.email.trim(), f.senha); }
     catch (e) { ui.erroLogin = e.message; }
     ui.entrando = false; render();
+  },
+
+  categoria: (form) => {
+    const extras = ui.dados.config.categoriasExtras || [];
+    const todas = [...new Set([...L.CATEGORIAS, ...L.CATEGORIAS_GASTO, ...extras])];
+    const nome = L.normalizarCategoria(new FormData(form).get('categoria'), todas);
+    if (!nome) return toast('Digite o nome da categoria.');
+    if (todas.includes(nome)) return toast(`"${nome}" já existe.`);
+    store.gravar('config', 'geral', { categoriasExtras: [...extras, nome] }, erroGravar);
+    toast(`Categoria "${nome}" criada`);
   },
 
   nome: (form) => {
@@ -662,7 +791,7 @@ const envios = {
     if (!Number.isInteger(atual) || atual < 1 || atual > total) return erro(`A parcela deste mês vai de 1 a ${total}.`);
     const antiga = ui.dados.parcelamentos.find((p) => p.id === form.dataset.id);
     const dados = { nome: out.nome, valorParcela: out.valor, categoria: out.categoria, dono: out.dono, dia: out.dia, total,
-      inicio: L.somaMes(mesAtual(), -(atual - 1)) };
+      inicio: L.somaMes(mesAtual(), -(atual - 1)), desde: antiga?.desde || mesAtual() };
     store.gravar('parcelamentos', antiga ? antiga.id : store.novoId('parcelamentos'), dados, erroGravar);
     fecharSheet();
   },
@@ -684,6 +813,13 @@ document.addEventListener('change', (ev) => {
     ev.target.form.querySelector('[data-so-anual]').hidden = ev.target.value !== 'anual';
   }
   if (ev.target.id === 'arquivo-backup' && ev.target.files[0]) restaurar(ev.target);
+  if (ev.target.name === 'categoria' && ev.target.value === '__nova') {
+    const sel = ev.target;
+    const nome = criarCategoria();
+    if (!nome) { sel.value = 'Outros'; return; }
+    if (![...sel.options].some((o) => o.value === nome)) sel.insertBefore(new Option(nome, nome), [...sel.options].find((o) => o.value === 'Outros'));
+    sel.value = nome;
+  }
 });
 // Ao escolher uma descrição já usada, marca a mesma categoria da última vez.
 document.addEventListener('input', (ev) => {
@@ -738,6 +874,9 @@ store.onAuth((user) => {
       (dados) => {
         const primeira = !ui.dados;
         ui.dados = { gastos: [], ...dados };
+        if (primeira) {   // parcelamentos criados antes de existir o campo "desde"
+          for (const p of dados.parcelamentos) if (!p.desde) store.gravar('parcelamentos', p.id, { desde: mesAtual() }, erroGravar);
+        }
         if (!dados.config.pessoas?.[user.uid] && !registrou) {   // primeira vez neste aparelho/conta
           registrou = true;
           store.gravar('config', 'geral', { pessoas: { [user.uid]: L.nomePadrao(user.email) } }, erroGravar);
