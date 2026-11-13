@@ -14,6 +14,9 @@ try {
   throw e;
 }
 
+function lerFiltro() { try { return localStorage.getItem('filtro') || 'tudo'; } catch { return 'tudo'; } }
+function salvarFiltro(v) { try { localStorage.setItem('filtro', v); } catch { /* sem armazenamento: vale só nesta sessão */ } }
+
 const ui = {
   user: undefined,          // undefined = verificando; null = deslogado
   aba: 'mes',
@@ -21,6 +24,7 @@ const ui = {
   dados: null,
   erroLogin: '',
   entrando: false,
+  filtro: lerFiltro(),      // 'tudo' | 'casa' | uid
 };
 let pararEscuta = null;
 
@@ -34,6 +38,19 @@ function toast(msg) {
   clearTimeout(toast.t);
   toast.t = setTimeout(() => $toast.classList.remove('visivel'), 3200);
 }
+// Pessoas da casa: { uid: nome }. Cada um entra na lista ao abrir o app pela primeira vez.
+const pessoas = () => ui.dados?.config?.pessoas || {};
+const donos = () => ['casa', ...Object.keys(pessoas()).sort((a, b) => (a === ui.user.uid ? -1 : b === ui.user.uid ? 1 : a.localeCompare(b)))];
+const filtroAtual = () => (ui.filtro === 'tudo' || donos().includes(ui.filtro) ? ui.filtro : 'tudo');
+const nomeDono = (d) => L.nomeDono(d, pessoas());
+
+function chipsFiltro() {
+  const f = filtroAtual();
+  const chip = (v, nome) => `<button data-acao="filtro" data-filtro="${esc(v)}" aria-pressed="${f === v}">${esc(nome)}</button>`;
+  return `<div class="chips" role="group" aria-label="Mostrar contas de">
+    ${chip('tudo', 'Tudo')}${donos().map((d) => chip(d, nomeDono(d))).join('')}</div>`;
+}
+
 const erroGravar = () => toast('Não foi possível salvar. Tente de novo.');
 
 // ---------- Telas ----------
@@ -62,7 +79,8 @@ function linhaConta(c, hoje) {
       aria-label="${c.pago ? 'Desmarcar' : 'Marcar'} ${esc(c.nome)} como paga"><span aria-hidden="true">✓</span></button>
     <button class="conta-corpo" data-acao="editar-conta" data-id="${esc(c.id)}">
       <span class="conta-nome">${esc(c.nome)} ${parcela}${fixa}</span>
-      <span class="conta-meta"><em>${esc(st.texto)}</em> · ${esc(c.categoria || 'Outros')}</span>
+      <span class="conta-meta"><em>${esc(st.texto)}</em> · ${esc(c.categoria || 'Outros')}${
+        filtroAtual() === 'tudo' ? ` · <span class="dono">${esc(nomeDono(L.donoDe(c)))}</span>` : ''}</span>
     </button>
     <span class="conta-valor">${L.fmtValor(c.valor)}</span>
   </li>`;
@@ -70,8 +88,11 @@ function linhaConta(c, hoje) {
 
 function telaMes() {
   const hoje = L.hojeStr();
-  const lista = L.contasDoMes(ui.dados, ui.mes);
+  const f = filtroAtual();
+  const doMes = L.contasDoMes(ui.dados, ui.mes);
+  const lista = L.filtrar(doMes, f);
   const r = L.resumo(lista, ui.dados.config.renda);
+  const partes = f === 'tudo' ? L.porDono(doMes) : [];
   const pct = r.total ? Math.round((r.pago / r.total) * 100) : 0;
   const abertas = lista.filter((c) => !c.pago);
   const pagas = lista.filter((c) => c.pago);
@@ -84,18 +105,23 @@ function telaMes() {
     </button>
     <button class="seta" data-acao="mes-prox" aria-label="Próximo mês">›</button>
   </header>
+  ${chipsFiltro()}
   <section class="resumo" aria-label="Resumo do mês">
-    <p class="rotulo">${tudoPago ? 'Tudo pago neste mês' : 'Falta pagar'}</p>
+    <p class="rotulo">${tudoPago ? 'Tudo pago neste mês' : 'Falta pagar'}${f === 'tudo' ? '' : ` · ${esc(nomeDono(f))}`}</p>
     <p class="destaque">${L.fmtValor(r.falta)}</p>
     <div class="barra" role="img" aria-label="${pct}% do mês já pago"><div style="width:${pct}%"></div></div>
     <dl>
       <div><dt>Total do mês</dt><dd>${L.fmtValor(r.total)}</dd></div>
       <div><dt>Já pago</dt><dd>${L.fmtValor(r.pago)}</dd></div>
-      <div><dt>Sobra da renda</dt><dd class="${r.sobra !== null && r.sobra < 0 ? 'negativo' : ''}">${
-        r.sobra === null ? '<button class="link" data-acao="ir-mais">informar renda</button>' : L.fmtValor(r.sobra)}</dd></div>
+      ${f === 'tudo' ? `<div><dt>Sobra da renda</dt><dd class="${r.sobra !== null && r.sobra < 0 ? 'negativo' : ''}">${
+        r.sobra === null ? '<button class="link" data-acao="ir-mais">informar renda</button>' : L.fmtValor(r.sobra)}</dd></div>`
+        : `<div><dt>Contas</dt><dd>${pagas.length} de ${lista.length} pagas</dd></div>`}
     </dl>
+    ${partes.length > 1 ? `<ul class="partes" aria-label="Total do mês por pessoa">
+      ${partes.map((p) => `<li><button data-acao="filtro" data-filtro="${esc(p.dono)}"><span>${esc(nomeDono(p.dono))}</span><strong>${L.fmtValor(p.total)}</strong></button></li>`).join('')}
+    </ul>` : ''}
   </section>
-  ${lista.length === 0 ? `<div class="vazio"><p>Nenhuma conta em ${L.nomeMes(ui.mes)}.</p>
+  ${lista.length === 0 ? `<div class="vazio"><p>Nenhuma conta ${f === 'tudo' ? '' : `de "${esc(nomeDono(f))}" `}em ${L.nomeMes(ui.mes)}.</p>
      <p>Toque em <strong>+ Conta</strong> para lançar uma, ou cadastre suas contas fixas na aba <strong>Fixas</strong>.</p></div>` : ''}
   ${abertas.length ? `<h2 class="secao">A pagar <span>${abertas.length}</span></h2>
      <ul class="lista">${abertas.map((c) => linhaConta(c, hoje)).join('')}</ul>` : ''}
@@ -105,12 +131,13 @@ function telaMes() {
 }
 
 function telaFuturo() {
-  const proj = L.projecao(ui.dados, mesAtual(), 12);
+  const proj = L.projecao(ui.dados, mesAtual(), 12, filtroAtual());
   const max = Math.max(1, ...proj.map((p) => p.total));
-  const parcs = [...ui.dados.parcelamentos].sort((a, b) => L.fimParcelamento(a).localeCompare(L.fimParcelamento(b)));
+  const parcs = L.filtrar(ui.dados.parcelamentos, filtroAtual()).sort((a, b) => L.fimParcelamento(a).localeCompare(L.fimParcelamento(b)));
   const ativos = parcs.filter((p) => L.fimParcelamento(p) >= mesAtual());
   return `
   <header class="topo simples"><h1>Próximos meses</h1></header>
+  ${chipsFiltro()}
   <section class="cartao">
     <p class="ajuda">Quanto já está comprometido em cada mês, somando fixas, parcelas e contas lançadas.</p>
     <ul class="proj">
@@ -131,7 +158,7 @@ function telaFuturo() {
       return `
       <li class="item"><button class="item-corpo" data-acao="editar-parc" data-id="${esc(p.id)}">
         <span class="conta-nome">${esc(p.nome)}</span>
-        <span class="conta-meta">${n ? `Parcela ${n} de ${p.total}` : `Começa em ${L.nomeMes(p.inicio)}`} · termina em ${L.nomeMes(L.fimParcelamento(p))}</span>
+        <span class="conta-meta">${n ? `Parcela ${n} de ${p.total}` : `Começa em ${L.nomeMes(p.inicio)}`} · termina em ${L.nomeMes(L.fimParcelamento(p))} · ${esc(nomeDono(L.donoDe(p)))}</span>
         <span class="barra fina"><span style="width:${(feitas / p.total) * 100}%"></span></span>
       </button><span class="conta-valor">${L.fmtValor(p.valorParcela)}<small>/mês</small></span></li>`;
     }).join('')}
@@ -140,10 +167,11 @@ function telaFuturo() {
 }
 
 function telaFixas() {
-  const recs = [...ui.dados.recorrentes].sort((a, b) => (a.dia - b.dia) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const recs = L.filtrar(ui.dados.recorrentes, filtroAtual()).sort((a, b) => (a.dia - b.dia) || a.nome.localeCompare(b.nome, 'pt-BR'));
   const mensal = recs.filter((r) => r.tipo !== 'anual').reduce((s, r) => s + (r.valor || 0), 0);
   return `
   <header class="topo simples"><h1>Contas fixas</h1></header>
+  ${chipsFiltro()}
   <section class="cartao">
     <p class="ajuda">Cadastre uma vez e a conta aparece sozinha todo mês. Se o valor mudar em um mês (como a luz), ajuste na própria conta do mês.</p>
     <p class="total-fixas"><span>Fixas por mês</span><strong>${L.fmtValor(mensal)}</strong></p>
@@ -153,7 +181,7 @@ function telaFixas() {
     ${recs.map((r) => `
     <li class="item"><button class="item-corpo" data-acao="editar-rec" data-id="${esc(r.id)}">
       <span class="conta-nome">${esc(r.nome)}</span>
-      <span class="conta-meta">${r.tipo === 'anual' ? `Todo ano, em ${L.nomeMesNum(r.mes).toLowerCase()}, dia ${r.dia}` : `Todo mês, dia ${r.dia}`} · ${esc(r.categoria || 'Outros')}</span>
+      <span class="conta-meta">${r.tipo === 'anual' ? `Todo ano, em ${L.nomeMesNum(r.mes).toLowerCase()}, dia ${r.dia}` : `Todo mês, dia ${r.dia}`} · ${esc(r.categoria || 'Outros')} · ${esc(nomeDono(L.donoDe(r)))}</span>
     </button><span class="conta-valor">${L.fmtValor(r.valor)}</span></li>`).join('')}
   </ul>`}
   <button class="fab" data-acao="nova-rec">+ Conta fixa</button>`;
@@ -169,6 +197,15 @@ function telaMais() {
     <form data-form="renda" class="linha-form">
       <label class="sr" for="renda">Renda mensal</label>
       <div class="campo-rs"><span>R$</span><input id="renda" name="renda" inputmode="decimal" value="${renda ? L.valorParaCampo(renda) : ''}" placeholder="0,00"></div>
+      <button class="btn">Salvar</button>
+    </form>
+  </section>
+  <section class="cartao">
+    <h2>Seu nome</h2>
+    <p class="ajuda">Aparece no filtro e nas contas que são só suas.</p>
+    <form data-form="nome" class="linha-form">
+      <label class="sr" for="meunome">Seu nome</label>
+      <input id="meunome" name="nome" maxlength="20" required value="${esc(pessoas()[ui.user.uid] || '')}">
       <button class="btn">Salvar</button>
     </form>
   </section>
@@ -211,6 +248,14 @@ const campoCategoria = (atual) => `
     ${L.CATEGORIAS.map((c) => `<option ${c === (atual || 'Outros') ? 'selected' : ''}>${c}</option>`).join('')}
   </select></label>`;
 
+// Em item novo, sugere o dono do filtro que está ativo.
+const campoDono = (atual) => {
+  const sel = atual || (filtroAtual() === 'tudo' ? 'casa' : filtroAtual());
+  return `<fieldset class="dono-campo"><legend>De quem é</legend><div class="chips">
+    ${donos().map((d) => `<label><input type="radio" name="dono" value="${esc(d)}" ${d === sel ? 'checked' : ''}><span>${esc(nomeDono(d))}</span></label>`).join('')}
+  </div></fieldset>`;
+};
+
 function abrirSheet(html) {
   $sheet.innerHTML = html;
   $sheet.showModal();
@@ -230,6 +275,7 @@ function formConta(c) {
     ${campoValor('valor', c?.valor, 'Valor')}
     <label>Vencimento<input name="venc" type="date" required value="${venc}" ${limites}></label>
     ${campoCategoria(c?.categoria)}
+    ${campoDono(c && L.donoDe(c))}
     <p class="erro" role="alert" hidden></p>
     <div class="acoes">
       ${novo ? '' : `<button type="button" class="btn perigo" data-acao="excluir-conta" data-id="${esc(c.id)}">${gerada ? 'Pular este mês' : 'Excluir'}</button>`}
@@ -256,6 +302,7 @@ function formRec(r) {
       ${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${Number(r?.mes) === i + 1 ? 'selected' : ''}>${L.nomeMesNum(i + 1)}</option>`).join('')}
     </select></label>
     ${campoCategoria(r?.categoria)}
+    ${campoDono(r && L.donoDe(r))}
     <p class="erro" role="alert" hidden></p>
     <div class="acoes">
       ${r ? `<button type="button" class="btn perigo" data-acao="excluir-rec" data-id="${esc(r.id)}">Excluir</button>` : ''}
@@ -278,6 +325,7 @@ function formParc(p) {
     </div>
     <label>Dia do vencimento<input name="dia" type="number" inputmode="numeric" min="1" max="31" required value="${p?.dia || ''}"></label>
     ${campoCategoria(p?.categoria || 'Cartão')}
+    ${campoDono(p && L.donoDe(p))}
     <p class="erro" role="alert" hidden></p>
     <div class="acoes">
       ${p ? `<button type="button" class="btn perigo" data-acao="excluir-parc" data-id="${esc(p.id)}">Excluir</button>` : ''}
@@ -295,7 +343,7 @@ function lerForm(form) {
   if (!nome) return erro('Informe o nome.');
   const valor = L.parseValor(f.valor);
   if (valor === null) return erro('Informe o valor, por exemplo 129,90.');
-  const out = { nome, valor, categoria: f.categoria || 'Outros' };
+  const out = { nome, valor, categoria: f.categoria || 'Outros', dono: f.dono || 'casa' };
   if ('dia' in f) {
     out.dia = Number(f.dia);
     if (!Number.isInteger(out.dia) || out.dia < 1 || out.dia > 31) return erro('O dia do vencimento vai de 1 a 31.');
@@ -321,6 +369,7 @@ const acoes = {
   'mes-hoje': () => { ui.mes = mesAtual(); render(); },
   'ver-mes': (el) => { ui.mes = el.dataset.mes; ui.aba = 'mes'; render(); window.scrollTo(0, 0); },
   fechar: fecharSheet,
+  filtro: (el) => { ui.filtro = el.dataset.filtro; salvarFiltro(ui.filtro); render(); },
 
   pagar: (el) => {
     const c = acharConta(el.dataset.id);
@@ -391,6 +440,13 @@ const envios = {
     ui.entrando = false; render();
   },
 
+  nome: (form) => {
+    const nome = new FormData(form).get('nome').trim();
+    if (!nome) return toast('Informe seu nome.');
+    store.gravar('config', 'geral', { pessoas: { [ui.user.uid]: nome } }, erroGravar);
+    toast('Nome salvo');
+  },
+
   renda: (form) => {
     const txt = new FormData(form).get('renda');
     const renda = txt.trim() === '' ? 0 : L.parseValor(txt);
@@ -434,7 +490,7 @@ const envios = {
     if (!Number.isInteger(total) || total < 1 || total > 360) return erro('Informe o total de parcelas.');
     if (!Number.isInteger(atual) || atual < 1 || atual > total) return erro(`A parcela deste mês vai de 1 a ${total}.`);
     const antiga = ui.dados.parcelamentos.find((p) => p.id === form.dataset.id);
-    const dados = { nome: out.nome, valorParcela: out.valor, categoria: out.categoria, dia: out.dia, total,
+    const dados = { nome: out.nome, valorParcela: out.valor, categoria: out.categoria, dono: out.dono, dia: out.dia, total,
       inicio: L.somaMes(mesAtual(), -(atual - 1)) };
     store.gravar('parcelamentos', antiga ? antiga.id : store.novoId('parcelamentos'), dados, erroGravar);
     fecharSheet();
@@ -462,14 +518,23 @@ window.addEventListener('offline', render);
 
 // ---------- Início ----------
 
+let registrou = false;
 store.onAuth((user) => {
+  registrou = false;
   pararEscuta?.();
   pararEscuta = null;
   ui.user = user;
   ui.dados = null;
   if (user) {
     pararEscuta = store.subscribe(
-      (dados) => { ui.dados = dados; render(); },
+      (dados) => {
+        ui.dados = dados;
+        if (!dados.config.pessoas?.[user.uid] && !registrou) {   // primeira vez neste aparelho/conta
+          registrou = true;
+          store.gravar('config', 'geral', { pessoas: { [user.uid]: L.nomePadrao(user.email) } }, erroGravar);
+        }
+        render();
+      },
       (msg) => toast(msg),
     );
   }

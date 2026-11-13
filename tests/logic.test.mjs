@@ -85,3 +85,30 @@ test('projeção e gravação', () => {
   assert.deepEqual(p[0], { mes: '2026-11', total: 137000, fixas: 105000, parcelas: 30000, avulsas: 2000 });
   assert.deepEqual(L.paraGravar({ id: 'z', virtual: true, nome: 'n' }), { nome: 'n' });
 });
+
+test('dono das contas e filtro', () => {
+  const d = {
+    recorrentes: [
+      { id: 'a', nome: 'Aluguel', valor: 1000, dia: 10, tipo: 'mensal' },
+      { id: 'c', nome: 'Celular', valor: 300, dia: 5, tipo: 'mensal', dono: 'u1' },
+    ],
+    parcelamentos: [{ id: 'g', nome: 'Curso', valorParcela: 200, dia: 8, total: 3, inicio: '2026-11', dono: 'u2' }],
+    contas: [
+      { id: 'x', nome: 'Avulsa', valor: 50, mes: '2026-11', venc: '2026-11-20', dono: 'u1', origem: 'avulsa' },
+      { id: 'r_c_2026-12', nome: 'Celular', valor: 300, mes: '2026-12', venc: '2026-12-05', dono: 'casa', origem: 'recorrente', origemId: 'c' },
+    ],
+  };
+  const nov = L.contasDoMes(d, '2026-11');
+  assert.deepEqual(nov.map((c) => [c.nome, c.dono || 'casa']),
+    [['Celular', 'u1'], ['Curso', 'u2'], ['Aluguel', 'casa'], ['Avulsa', 'u1']]);
+  assert.deepEqual(L.filtrar(nov, 'u1').map((c) => c.nome), ['Celular', 'Avulsa']);
+  assert.deepEqual(L.filtrar(nov, 'casa').map((c) => c.nome), ['Aluguel']);
+  assert.equal(L.filtrar(nov, 'tudo').length, 4);
+  assert.deepEqual(L.porDono(nov), [{ dono: 'casa', total: 1000 }, { dono: 'u1', total: 350 }, { dono: 'u2', total: 200 }]);
+  assert.deepEqual(L.projecao(d, '2026-11', 2, 'u1').map((p) => p.total), [350, 0], 'em dezembro o celular foi mudado para dos dois');
+  assert.deepEqual(L.projecao(d, '2026-11', 2).map((p) => p.total), [1550, 1500]);
+  assert.equal(L.nomeDono('casa', {}), 'Dos dois');
+  assert.equal(L.nomeDono('u1', { u1: 'Rodrigo' }), 'Rodrigo');
+  assert.equal(L.nomePadrao('julia.silva22@gmail.com'), 'Julia');
+  assert.equal(L.nomePadrao('123@x.com'), 'Eu');
+});

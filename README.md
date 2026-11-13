@@ -5,6 +5,7 @@ App de celular (PWA) para acompanhar as contas da casa: o que vence no mês, o q
 ## Telas
 
 - **Mês**: contas do mês por vencimento, com total, pago, falta pagar e sobra da renda.
+- **Filtro por dono**: cada conta é de uma pessoa ou dos dois; o filtro no topo vale para Mês, Futuro e Fixas.
 - **Futuro**: quanto já está comprometido nos próximos 12 meses e os parcelamentos em andamento.
 - **Fixas**: contas que se repetem todo mês ou todo ano.
 - **Mais**: renda mensal, backup (exportar JSON) e sair.

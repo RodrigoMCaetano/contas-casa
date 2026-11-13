@@ -163,3 +163,22 @@ dialog#sheet h2 { font-size: 1.15rem; margin-bottom: 14px; }
 #toast { position: fixed; left: 50%; bottom: calc(146px + env(safe-area-inset-bottom)); transform: translate(-50%, 12px); background: #1b211d; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: .9rem; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: 88vw; text-align: center; z-index: 10; }
 #toast.visivel { opacity: 1; transform: translate(-50%, 0); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Filtro por dono */
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 12px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chips > button, .chips label span { flex: none; display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 99px; border: 1px solid var(--linha); background: var(--cartao); color: var(--suave); font-size: .9rem; font-weight: 600; white-space: nowrap; }
+.chips > button[aria-pressed="true"], .chips input:checked + span { background: var(--texto); border-color: var(--texto); color: var(--fundo); }
+.chips label { margin: 0; }
+.chips input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; margin: 0; padding: 0; }
+.chips input:focus-visible + span { outline: 3px solid #4c9aff; outline-offset: 2px; }
+.dono-campo { border: 0; padding: 0; margin: 0 0 4px; }
+.dono-campo legend { font-size: .85rem; font-weight: 600; color: var(--suave); padding: 0; margin-bottom: 4px; }
+.dono-campo .chips > label span { background: var(--fundo); }
+.dono-campo .chips input:checked + span { background: var(--texto); }
+.partes { display: flex; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgb(255 255 255 / .22); }
+.partes li { flex: 1; min-width: 0; }
+.partes button { width: 100%; background: rgb(255 255 255 / .12); border: 0; border-radius: 12px; padding: 8px 10px; color: inherit; text-align: left; display: flex; flex-direction: column; min-height: 48px; }
+.partes span { font-size: .72rem; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.partes strong { font-size: .9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.linha-form > input { flex: 1; margin: 0; }

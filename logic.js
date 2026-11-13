@@ -62,6 +62,26 @@ export function valorParaCampo(centavos) {
   return ((centavos || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// De quem é a conta: 'casa' (dos dois) ou o uid de uma pessoa. Sem marcação = dos dois.
+export function donoDe(x) { return x?.dono || 'casa'; }
+export function filtrar(lista, filtro) {
+  return !filtro || filtro === 'tudo' ? lista : lista.filter((x) => donoDe(x) === filtro);
+}
+export function nomeDono(dono, pessoas = {}) {
+  return dono === 'casa' ? 'Dos dois' : (pessoas[dono] || 'Outra pessoa');
+}
+// Total por dono, na ordem: dos dois, depois as pessoas.
+export function porDono(lista) {
+  const mapa = new Map();
+  for (const c of lista) mapa.set(donoDe(c), (mapa.get(donoDe(c)) || 0) + (c.valor || 0));
+  return [...mapa].map(([dono, total]) => ({ dono, total }))
+    .sort((a, b) => (a.dono === 'casa' ? -1 : b.dono === 'casa' ? 1 : a.dono.localeCompare(b.dono)));
+}
+export function nomePadrao(email) {
+  const n = (String(email || '').split('@')[0].match(/^[a-zA-ZÀ-ÿ]+/) || ['Eu'])[0];
+  return n[0].toUpperCase() + n.slice(1).toLowerCase();
+}
+
 export function recorrenteValeNoMes(r, mes) {
   if (r.desde && mes < r.desde) return false;
   if (r.ate && mes > r.ate) return false;
@@ -89,7 +109,7 @@ export function contasDoMes(dados, mes) {
     if (reais.has(id)) continue;
     lista.push({
       id, virtual: true, nome: r.nome, valor: r.valor, mes, venc: dataVenc(mes, r.dia),
-      categoria: r.categoria, pago: false, origem: 'recorrente', origemId: r.id,
+      categoria: r.categoria, dono: donoDe(r), pago: false, origem: 'recorrente', origemId: r.id,
     });
   }
   for (const p of dados.parcelamentos || []) {
@@ -99,7 +119,7 @@ export function contasDoMes(dados, mes) {
     if (reais.has(id)) continue;
     lista.push({
       id, virtual: true, nome: p.nome, valor: p.valorParcela, mes, venc: dataVenc(mes, p.dia),
-      categoria: p.categoria, pago: false, origem: 'parcela', origemId: p.id,
+      categoria: p.categoria, dono: donoDe(p), pago: false, origem: 'parcela', origemId: p.id,
       parcelaN: n, parcelaTotal: p.total,
     });
   }
@@ -122,12 +142,12 @@ export function resumo(lista, renda) {
   return { total, pago, falta: total - pago, sobra: renda ? renda - total : null };
 }
 
-export function projecao(dados, mesInicial, n) {
+export function projecao(dados, mesInicial, n, filtro = 'tudo') {
   const out = [];
   for (let i = 0; i < n; i++) {
     const mes = somaMes(mesInicial, i);
     const item = { mes, total: 0, fixas: 0, parcelas: 0, avulsas: 0 };
-    for (const c of contasDoMes(dados, mes)) {
+    for (const c of filtrar(contasDoMes(dados, mes), filtro)) {
       const v = c.valor || 0;
       item.total += v;
       if (c.origem === 'recorrente') item.fixas += v;
