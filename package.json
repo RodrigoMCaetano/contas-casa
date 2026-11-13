@@ -1,0 +1,8 @@
+{
+  "name": "contas-casa",
+  "private": true,
+  "type": "module",
+  "description": "Usado só pela tarefa de lembretes (GitHub Actions). O app em si não tem etapa de build.",
+  "scripts": { "test": "node --test tests/logic.test.mjs" },
+  "dependencies": { "firebase-admin": "^13.0.0" }
+}

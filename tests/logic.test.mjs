@@ -148,3 +148,24 @@ test('sugestões e backup', () => {
   const ok = L.lerBackup(JSON.stringify({ exportadoEm: 'x', contas: [{ id: 'c1', nome: 'A' }], gastos: [{ id: 'g1', valor: 5 }], config: { renda: 9 } }));
   assert.deepEqual(ok.itens, [['contas', 'c1', { nome: 'A' }], ['gastos', 'g1', { valor: 5 }], ['config', 'geral', { renda: 9 }]]);
 });
+
+test('lembrete de vencimento', () => {
+  const hoje = '2026-11-13';
+  const contas = [
+    { nome: 'Luz', valor: 24000, venc: '2026-11-13' },
+    { nome: 'Internet', valor: 9990, venc: '2026-11-14', dono: 'u1' },
+    { nome: 'Cartão', valor: 50000, venc: '2026-10-28' },
+    { nome: 'Da Julia', valor: 1000, venc: '2026-11-13', dono: 'u2' },
+    { nome: 'Já paga', valor: 1000, venc: '2026-11-13', pago: true },
+    { nome: 'Longe', valor: 1000, venc: '2026-11-25' },
+  ];
+  const l = L.lembrete(contas, hoje, 'u1');
+  assert.equal(l.titulo, '1 conta vence hoje · 1 conta vence amanhã · 1 conta atrasada');
+  assert.match(l.corpo, /^Luz R\$\s240,00 · Internet R\$\s99,90 · Cartão R\$\s500,00$/);
+  assert.equal(L.lembrete(contas, hoje, 'u2').titulo, '2 contas vencem hoje · 1 conta atrasada');
+  assert.equal(L.lembrete(contas, '2026-11-20', 'u2').titulo, '3 contas atrasadas');
+  assert.equal(L.lembrete(contas, '2026-11-26', 'u1').titulo, '4 contas atrasadas');
+  assert.match(L.lembrete(contas, '2026-11-26', 'u1').corpo, / · e mais 1$/);
+  assert.equal(L.lembrete([contas[5]], hoje, 'u1'), null);
+  assert.equal(L.lembrete([], hoje, 'u1'), null);
+});

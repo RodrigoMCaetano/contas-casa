@@ -232,3 +232,24 @@ export function lerBackup(texto) {
   if (b.config && typeof b.config === 'object') itens.push(['config', 'geral', b.config]);
   return { itens, exportadoEm: b.exportadoEm || null };
 }
+
+// ---------- Lembrete de vencimento ----------
+
+// Monta o aviso do dia para uma pessoa. `contas` = contas do mês atual e do anterior.
+// Devolve null quando não há nada vencendo hoje, amanhã ou atrasado.
+export function lembrete(contas, hoje, uid) {
+  const minhas = contas.filter((c) => !c.pago && (donoDe(c) === 'casa' || donoDe(c) === uid))
+    .sort((a, b) => a.venc.localeCompare(b.venc));
+  const grupo = (teste) => minhas.filter((c) => teste(diasEntre(hoje, c.venc)));
+  const deHoje = grupo((d) => d === 0), deAmanha = grupo((d) => d === 1), atrasadas = grupo((d) => d < 0);
+  const partes = [];
+  const n = (lista, um, varios) => `${lista.length} ${lista.length === 1 ? um : varios}`;
+  if (deHoje.length) partes.push(n(deHoje, 'conta vence hoje', 'contas vencem hoje'));
+  if (deAmanha.length) partes.push(n(deAmanha, 'conta vence amanhã', 'contas vencem amanhã'));
+  if (atrasadas.length) partes.push(n(atrasadas, 'conta atrasada', 'contas atrasadas'));
+  if (!partes.length) return null;
+  const itens = [...deHoje, ...deAmanha, ...atrasadas];
+  const corpo = itens.slice(0, 3).map((c) => `${c.nome} ${fmtValor(c.valor)}`).join(' · ')
+    + (itens.length > 3 ? ` · e mais ${itens.length - 3}` : '');
+  return { titulo: partes.join(' · '), corpo };
+}

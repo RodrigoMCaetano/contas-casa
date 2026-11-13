@@ -32,6 +32,17 @@ try {
   db = initializeFirestore(app, {}); // navegador sem IndexedDB: segue sem cache offline
 }
 
+// Chave pública de notificações web (Cloud Messaging > Certificados push da Web).
+const VAPID = 'BEZ56fUd5C3brAdsm205nQcet72K1gQ_GUQ1sjYqZ4aRpLB7LA0zRybWi7d6lDQXuH4OaXodtdzkh56nuJMbCrE';
+const fcm = () => import(`${base}/firebase-messaging.js`);   // só carrega quando for usar
+async function tokenDoAparelho(m) {
+  const reg = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, falha) => setTimeout(() => falha(new Error('sw')), 8000)),
+  ]);
+  return m.getToken(m.getMessaging(app), { vapidKey: VAPID, serviceWorkerRegistration: reg });
+}
+
 const ERROS = {
   'auth/invalid-credential': 'E-mail ou senha incorretos.',
   'auth/wrong-password': 'E-mail ou senha incorretos.',
@@ -76,6 +87,25 @@ export default {
   },
 
   novoId(col) { return doc(collection(db, col)).id; },
+
+  notificacoes: {
+    async suportado() {
+      try { return 'Notification' in window && 'serviceWorker' in navigator && await (await fcm()).isSupported(); }
+      catch { return false; }
+    },
+    // Registra este aparelho para receber o lembrete diário.
+    async ativar(uid) {
+      const token = await tokenDoAparelho(await fcm());
+      if (!token) throw new Error('sem token');
+      await setDoc(doc(db, 'dispositivos', token), { uid, atualizadoEm: Date.now() }, { merge: true });
+    },
+    async desativar() {
+      const m = await fcm();
+      const token = await tokenDoAparelho(m).catch(() => null);
+      if (token) await deleteDoc(doc(db, 'dispositivos', token)).catch(() => {});
+      await m.deleteToken(m.getMessaging(app)).catch(() => {});
+    },
+  },
 
   // Sem await de propósito: offline, a gravação fica na fila e sincroniza depois.
   gravar(col, id, dados, onErro) {

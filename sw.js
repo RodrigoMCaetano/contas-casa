@@ -1,6 +1,6 @@
 // Guarda os arquivos do app para abrir sem internet.
 // Os dados ficam por conta do cache offline do próprio Firestore.
-const CACHE = 'contas-casa-v3';
+const CACHE = 'contas-casa-v4';
 const ARQUIVOS = ['./', 'index.html', 'style.css', 'app.js', 'logic.js', 'store-firebase.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -47,4 +47,24 @@ self.addEventListener('fetch', (ev) => {
   if (url.origin === self.location.origin) ev.respondWith(doApp(req));
   else if (url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/')) ev.respondWith(doSdk(req));
   // chamadas ao Firebase (login e banco) passam direto
+});
+
+// ---------- Notificações (lembrete diário enviado pelo GitHub Actions) ----------
+
+self.addEventListener('push', (ev) => {
+  let p = {};
+  try { p = ev.data.json(); } catch { /* sem conteúdo legível: mostra o aviso padrão */ }
+  const titulo = p.data?.title || p.notification?.title || 'Contas da Casa';
+  const corpo = p.data?.body || p.notification?.body || 'Você tem contas para conferir.';
+  ev.waitUntil(self.registration.showNotification(titulo, {
+    body: corpo, icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', tag: 'lembrete-contas',
+  }));
+});
+
+self.addEventListener('notificationclick', (ev) => {
+  ev.notification.close();
+  ev.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((abertas) => {
+    const janela = abertas.find((c) => c.url.startsWith(self.registration.scope));
+    return janela ? janela.focus() : self.clients.openWindow(self.registration.scope);
+  }));
 });

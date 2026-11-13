@@ -14,6 +14,8 @@ try {
   throw e;
 }
 
+function lerLocal(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function gravarLocal(k, v) { try { localStorage.setItem(k, v); } catch { /* vale só nesta sessão */ } }
 function lerFiltro() { try { return localStorage.getItem('filtro') || 'tudo'; } catch { return 'tudo'; } }
 function salvarFiltro(v) { try { localStorage.setItem('filtro', v); } catch { /* sem armazenamento: vale só nesta sessão */ } }
 
@@ -25,6 +27,9 @@ const ui = {
   erroLogin: '',
   entrando: false,
   filtro: lerFiltro(),      // 'tudo' | 'casa' | uid
+  notifOk: null,            // este navegador aceita notificações? (null = verificando)
+  notifLigada: lerLocal('lembretes') === '1',
+  notifOcupado: false,
 };
 let pararEscuta = null;
 
@@ -240,6 +245,20 @@ function telaFixas() {
   <button class="fab" data-acao="nova-rec">+ Conta fixa</button>`;
 }
 
+function secaoLembrete() {
+  if (store.demo) return '<p class="ajuda">Indisponível no modo demonstração.</p>';
+  if (ui.notifOk === null) return '<p class="ajuda">Verificando…</p>';
+  if (!ui.notifOk) return '<p class="ajuda">Este navegador não aceita notificações. No Android, use o app instalado pelo Chrome.</p>';
+  if (Notification.permission === 'denied') {
+    return '<p class="ajuda">As notificações estão bloqueadas para este app. Libere nas configurações do Android (Apps → Contas → Notificações) e volte aqui.</p>';
+  }
+  const ligada = ui.notifLigada && Notification.permission === 'granted';
+  return `
+    <p class="ajuda">${ligada ? 'Ativado neste celular. Você recebe' : 'Receba'} um aviso por dia, de manhã, quando houver conta sua ou dos dois vencendo hoje, amanhã ou atrasada.</p>
+    <button class="btn ${ligada ? '' : 'primario'}" data-acao="${ligada ? 'lembrete-off' : 'lembrete-on'}" ${ui.notifOcupado ? 'disabled' : ''}>${
+      ui.notifOcupado ? 'Aguarde…' : ligada ? 'Desativar neste celular' : 'Ativar neste celular'}</button>`;
+}
+
 function telaMais() {
   const renda = ui.dados.config.renda;
   return `
@@ -252,6 +271,10 @@ function telaMais() {
       <div class="campo-rs"><span>R$</span><input id="renda" name="renda" inputmode="decimal" value="${renda ? L.valorParaCampo(renda) : ''}" placeholder="0,00"></div>
       <button class="btn">Salvar</button>
     </form>
+  </section>
+  <section class="cartao">
+    <h2>Lembrete de vencimento</h2>
+    ${secaoLembrete()}
   </section>
   <section class="cartao">
     <h2>Limite de gastos do dia a dia</h2>
@@ -499,6 +522,27 @@ const acoes = {
   },
   importar: () => document.getElementById('arquivo-backup').click(),
 
+  'lembrete-on': async () => {
+    ui.notifOcupado = true; render();
+    try {
+      if (await Notification.requestPermission() !== 'granted') throw new Error('negado');
+      await store.notificacoes.ativar(ui.user.uid);
+      ui.notifLigada = true; gravarLocal('lembretes', '1');
+      toast('Lembretes ativados neste celular');
+    } catch (e) {
+      toast(e.message === 'negado' ? 'Permissão de notificação não concedida.'
+        : 'Não foi possível ativar. Confira a internet e tente de novo.');
+    }
+    ui.notifOcupado = false; render();
+  },
+  'lembrete-off': async () => {
+    ui.notifOcupado = true; render();
+    await store.notificacoes.desativar().catch(() => {});
+    ui.notifLigada = false; gravarLocal('lembretes', '0');
+    ui.notifOcupado = false; render();
+    toast('Lembretes desativados neste celular');
+  },
+
   'nova-rec': () => formRec(null),
   'editar-rec': (el) => formRec(ui.dados.recorrentes.find((r) => r.id === el.dataset.id)),
   'excluir-rec': (el) => {
@@ -682,6 +726,13 @@ store.onAuth((user) => {
   pararEscuta = null;
   ui.user = user;
   ui.dados = null;
+  if (user && store.notificacoes) {
+    store.notificacoes.suportado().then((ok) => {
+      ui.notifOk = ok; render();
+      // Mantém o registro do aparelho em dia (o código de entrega pode mudar com o tempo).
+      if (ok && ui.notifLigada && Notification.permission === 'granted') store.notificacoes.ativar(user.uid).catch(() => {});
+    });
+  }
   if (user) {
     pararEscuta = store.subscribe(
       (dados) => {

@@ -20,3 +20,12 @@ Segurar o ícone do app no Android mostra os atalhos **Novo gasto** e **Nova con
 - `store-firebase.js` cuida do login e do banco. O acesso é restrito pelas regras do Firestore aos usuários da casa.
 - Abrir com `?demo` no fim do endereço mostra dados de exemplo, sem login e sem salvar nada.
 - Ao mudar arquivos do app, aumente o número em `CACHE` no `sw.js` para os celulares pegarem a versão nova.
+
+## Lembrete de vencimento
+
+Todo dia, por volta das 8h (horário de Brasília), o GitHub Actions roda `scripts/lembretes.mjs`, que lê as contas no Firestore e envia uma notificação aos celulares que ativaram o lembrete em **Mais**. Só chega aviso quando há conta vencendo hoje, amanhã ou atrasada.
+
+- Precisa do segredo `FIREBASE_SERVICE_ACCOUNT` em **Settings → Secrets and variables → Actions**, com o conteúdo do arquivo de chave da conta de serviço do Firebase. Essa chave dá acesso total ao projeto: nunca a coloque no código.
+- Para testar, abra a aba **Actions → Lembrete de vencimento → Run workflow** com a opção de teste marcada.
+- O GitHub desativa tarefas agendadas de repositórios sem atividade por cerca de 60 dias. Se os lembretes pararem, reative na aba **Actions**.
+- O registro de execução é público, por isso o script só imprime contagens, nunca nomes ou valores.
