@@ -112,3 +112,39 @@ test('dono das contas e filtro', () => {
   assert.equal(L.nomePadrao('julia.silva22@gmail.com'), 'Julia');
   assert.equal(L.nomePadrao('123@x.com'), 'Eu');
 });
+
+test('gastos do dia a dia', () => {
+  const d = { gastos: [
+    { id: '1', descricao: 'Lanche', valor: 4500, data: '2026-11-13', mes: '2026-11', categoria: 'Alimentação', dono: 'u1', criadoEm: 1 },
+    { id: '2', descricao: 'Uber', valor: 1800, data: '2026-11-13', mes: '2026-11', categoria: 'Transporte', criadoEm: 2 },
+    { id: '3', descricao: 'Padaria', valor: 1200, data: '2026-11-12', mes: '2026-11', categoria: 'Alimentação', criadoEm: 3 },
+    { id: '4', descricao: 'Cinema', valor: 6000, data: '2026-10-30', mes: '2026-10', categoria: 'Lazer' },
+  ] };
+  const nov = L.gastosDoMes(d, '2026-11');
+  assert.deepEqual(nov.map((g) => g.id), ['2', '1', '3'], 'mais recente primeiro');
+  assert.equal(L.somar(nov), 7500);
+  assert.deepEqual(L.gastosDoMes(d, '2026-11', 'u1').map((g) => g.id), ['1']);
+  assert.deepEqual(L.gastosDoMes(d, '2026-11', 'casa').map((g) => g.id), ['2', '3']);
+  assert.deepEqual(L.porCategoria(nov), [{ categoria: 'Alimentação', total: 5700 }, { categoria: 'Transporte', total: 1800 }]);
+  assert.deepEqual(L.porDia(nov).map((x) => [x.data, x.total, x.itens.length]), [['2026-11-13', 6300, 2], ['2026-11-12', 1200, 1]]);
+  assert.equal(L.rotuloDia('2026-11-13', '2026-11-13'), 'Hoje');
+  assert.equal(L.rotuloDia('2026-11-12', '2026-11-13'), 'Ontem');
+  assert.equal(L.rotuloDia('2026-11-10', '2026-11-13'), 'ter, 10/11');
+  assert.equal(L.gastosDoMes({}, '2026-11').length, 0);
+  assert.equal(L.resumo([{ valor: 1000 }], 5000, 700).sobra, 3300);
+});
+
+test('sugestões e backup', () => {
+  const gastos = [
+    { descricao: 'Lanche', categoria: 'Alimentação', data: '2026-11-10' },
+    { descricao: 'lanche ', categoria: 'Lazer', data: '2026-11-12' },
+    { descricao: 'Uber', categoria: 'Transporte', data: '2026-11-11' },
+  ];
+  assert.deepEqual(L.sugestoesGasto(gastos), [{ descricao: 'lanche', categoria: 'Lazer' }, { descricao: 'Uber', categoria: 'Transporte' }]);
+  assert.equal(L.dataCurta('2026-11-03'), '03/11');
+  assert.ok(L.lerBackup('nada').erro);
+  assert.ok(L.lerBackup('{"a":1}').erro);
+  assert.ok(L.lerBackup('{"contas":[{"nome":"sem id"}]}').erro);
+  const ok = L.lerBackup(JSON.stringify({ exportadoEm: 'x', contas: [{ id: 'c1', nome: 'A' }], gastos: [{ id: 'g1', valor: 5 }], config: { renda: 9 } }));
+  assert.deepEqual(ok.itens, [['contas', 'c1', { nome: 'A' }], ['gastos', 'g1', { valor: 5 }], ['config', 'geral', { renda: 9 }]]);
+});

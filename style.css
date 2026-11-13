@@ -182,3 +182,16 @@ dialog#sheet h2 { font-size: 1.15rem; margin-bottom: 14px; }
 .partes span { font-size: .72rem; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .partes strong { font-size: .9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .linha-form > input { flex: 1; margin: 0; }
+
+/* Gastos */
+.cats li > div { display: grid; grid-template-columns: 92px 1fr auto; align-items: center; gap: 10px; padding: 11px 0; }
+.cats .proj-mes { text-transform: none; }
+.secao.dia { display: flex; justify-content: space-between; align-items: baseline; text-transform: none; letter-spacing: 0; font-size: .9rem; }
+.secao.dia b { color: var(--texto); }
+.secao.dia span { font-variant-numeric: tabular-nums; opacity: 1; }
+.chips.quebra { flex-wrap: wrap; overflow: visible; }
+.abas button { font-size: .72rem; }
+.resumo .limite { font-size: .85rem; margin-top: 8px; opacity: .95; }
+.resumo.estourou .barra > * { background: #ffd0cb; }
+.resumo.estourou .limite { font-weight: 700; }
+.linha-botoes { display: flex; gap: 10px; flex-wrap: wrap; }

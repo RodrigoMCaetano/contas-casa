@@ -136,10 +136,11 @@ export function status(conta, hoje) {
   return { tipo: 'aberta', texto: `Vence ${dia}` };
 }
 
-export function resumo(lista, renda) {
+// A sobra desconta as contas do mês e também os gastos do dia a dia.
+export function resumo(lista, renda, gastos = 0) {
   let total = 0, pago = 0;
   for (const c of lista) { total += c.valor || 0; if (c.pago) pago += c.valor || 0; }
-  return { total, pago, falta: total - pago, sobra: renda ? renda - total : null };
+  return { total, pago, falta: total - pago, sobra: renda ? renda - total - gastos : null };
 }
 
 export function projecao(dados, mesInicial, n, filtro = 'tudo') {
@@ -163,4 +164,71 @@ export function projecao(dados, mesInicial, n, filtro = 'tudo') {
 export function paraGravar(conta) {
   const { virtual, id, ...resto } = conta;
   return resto;
+}
+
+// ---------- Gastos do dia a dia ----------
+
+export const CATEGORIAS_GASTO = ['Alimentação', 'Mercado', 'Transporte', 'Lazer', 'Compras', 'Outros'];
+
+export function gastosDoMes(dados, mes, filtro = 'tudo') {
+  return filtrar((dados.gastos || []).filter((g) => g.mes === mes), filtro)
+    .sort((a, b) => b.data.localeCompare(a.data) || (b.criadoEm || 0) - (a.criadoEm || 0));
+}
+export function somar(lista) { return lista.reduce((s, x) => s + (x.valor || 0), 0); }
+
+export function porCategoria(lista) {
+  const mapa = new Map();
+  for (const g of lista) mapa.set(g.categoria || 'Outros', (mapa.get(g.categoria || 'Outros') || 0) + (g.valor || 0));
+  return [...mapa].map(([categoria, total]) => ({ categoria, total })).sort((a, b) => b.total - a.total);
+}
+
+// [{ data, total, itens }] do dia mais recente para o mais antigo.
+export function porDia(lista) {
+  const dias = [];
+  for (const g of lista) {
+    let d = dias[dias.length - 1];
+    if (!d || d.data !== g.data) { d = { data: g.data, total: 0, itens: [] }; dias.push(d); }
+    d.itens.push(g); d.total += g.valor || 0;
+  }
+  return dias;
+}
+
+export function rotuloDia(data, hoje) {
+  const d = diasEntre(data, hoje);
+  if (d === 0) return 'Hoje';
+  if (d === 1) return 'Ontem';
+  const [a, m, dia] = data.split('-').map(Number);
+  const sem = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][new Date(Date.UTC(a, m - 1, dia)).getUTCDay()];
+  return `${sem}, ${p2(dia)}/${p2(m)}`;
+}
+
+// Descrições já usadas (mais recentes primeiro), com a categoria que tinham.
+export function sugestoesGasto(gastos, limite = 30) {
+  const vistos = new Map();
+  for (const g of [...(gastos || [])].sort((a, b) => b.data.localeCompare(a.data) || (b.criadoEm || 0) - (a.criadoEm || 0))) {
+    const chave = (g.descricao || '').trim().toLowerCase();
+    if (chave && !vistos.has(chave)) vistos.set(chave, { descricao: g.descricao.trim(), categoria: g.categoria });
+    if (vistos.size >= limite) break;
+  }
+  return [...vistos.values()];
+}
+
+export function dataCurta(data) { const [, m, d] = data.split('-'); return `${d}/${m}`; }
+
+// Confere um backup antes de restaurar. Devolve { itens: [[coleção, id, dados]], erro }.
+export function lerBackup(texto) {
+  let b;
+  try { b = JSON.parse(texto); } catch { return { erro: 'O arquivo não é um backup válido.' }; }
+  const cols = ['contas', 'recorrentes', 'parcelamentos', 'gastos'];
+  if (!b || typeof b !== 'object' || !cols.some((c) => Array.isArray(b[c]))) return { erro: 'O arquivo não é um backup deste app.' };
+  const itens = [];
+  for (const col of cols) {
+    for (const x of b[col] || []) {
+      if (!x || typeof x.id !== 'string' || !x.id) return { erro: 'O backup tem itens sem identificação.' };
+      const { id, ...resto } = x;
+      itens.push([col, id, resto]);
+    }
+  }
+  if (b.config && typeof b.config === 'object') itens.push(['config', 'geral', b.config]);
+  return { itens, exportadoEm: b.exportadoEm || null };
 }

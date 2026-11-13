@@ -1,5 +1,5 @@
 // Modo demonstração (abra com ?demo): dados de exemplo só na memória, nada é salvo.
-import { mesDe, somaMes, dataVenc } from './logic.js';
+import { mesDe, somaMes, dataVenc, hojeStr } from './logic.js';
 
 const mes = mesDe(new Date());
 const dados = {
@@ -14,6 +14,12 @@ const dados = {
   parcelamentos: [
     { id: 'p1', nome: 'Geladeira', valorParcela: 32900, dia: 8, categoria: 'Cartão', total: 10, inicio: somaMes(mes, -3) },
     { id: 'p2', nome: 'Notebook', valorParcela: 45000, dia: 8, categoria: 'Cartão', total: 12, dono: 'demo', inicio: somaMes(mes, -9) },
+  ],
+  gastos: [
+    { id: 'g1', descricao: 'Lanche', valor: 5400, data: hojeStr(), mes, categoria: 'Alimentação', dono: 'casa', criadoEm: 3 },
+    { id: 'g2', descricao: 'Uber', valor: 1890, data: hojeStr(), mes, categoria: 'Transporte', dono: 'demo', criadoEm: 2 },
+    { id: 'g3', descricao: 'Mercado da semana', valor: 31250, data: dataVenc(mes, 2), mes, categoria: 'Mercado', dono: 'casa', criadoEm: 1 },
+    { id: 'g4', descricao: 'Farmácia', valor: 4700, data: dataVenc(mes, 1), mes, categoria: 'Outros', dono: 'j', criadoEm: 0 },
   ],
   contas: [
     { id: `r_r4_${mes}`, nome: 'Streaming', valor: 5590, mes, venc: dataVenc(mes, 5), categoria: 'Assinaturas', dono: 'j', pago: true, pagoEm: dataVenc(mes, 4), origem: 'recorrente', origemId: 'r4' },

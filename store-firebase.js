@@ -58,9 +58,9 @@ export default {
 
   // Escuta tudo em tempo real. cb(dados) a cada mudança; onErro(msg) se falhar.
   subscribe(cb, onErro) {
-    const dados = { contas: [], recorrentes: [], parcelamentos: [], config: {} };
+    const dados = { contas: [], recorrentes: [], parcelamentos: [], gastos: [], config: {} };
     const prontos = new Set();
-    const avisar = (chave) => { prontos.add(chave); if (prontos.size === 4) cb({ ...dados }); };
+    const avisar = (chave) => { prontos.add(chave); if (prontos.size === 5) cb({ ...dados }); };
     const falha = (e) => onErro(e.code === 'permission-denied'
       ? 'Sem permissão para ler os dados. Confira as regras do Firestore.'
       : 'Erro ao carregar os dados.');
@@ -69,7 +69,7 @@ export default {
       avisar(nome);
     }, falha);
     const paradas = [
-      lista('contas'), lista('recorrentes'), lista('parcelamentos'),
+      lista('contas'), lista('recorrentes'), lista('parcelamentos'), lista('gastos'),
       onSnapshot(doc(db, 'config', 'geral'), (d) => { dados.config = d.data() || {}; avisar('config'); }, falha),
     ];
     return () => paradas.forEach((p) => p());

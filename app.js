@@ -79,7 +79,8 @@ function linhaConta(c, hoje) {
       aria-label="${c.pago ? 'Desmarcar' : 'Marcar'} ${esc(c.nome)} como paga"><span aria-hidden="true">✓</span></button>
     <button class="conta-corpo" data-acao="editar-conta" data-id="${esc(c.id)}">
       <span class="conta-nome">${esc(c.nome)} ${parcela}${fixa}</span>
-      <span class="conta-meta"><em>${esc(st.texto)}</em> · ${esc(c.categoria || 'Outros')}${
+      <span class="conta-meta"><em>${esc(st.texto)}${c.pago && c.pagoEm ? ` em ${L.dataCurta(c.pagoEm)}` : ''}${
+        c.pago && pessoas()[c.pagoPorUid] ? ` por ${esc(pessoas()[c.pagoPorUid])}` : ''}</em> · ${esc(c.categoria || 'Outros')}${
         filtroAtual() === 'tudo' ? ` · <span class="dono">${esc(nomeDono(L.donoDe(c)))}</span>` : ''}</span>
     </button>
     <span class="conta-valor">${L.fmtValor(c.valor)}</span>
@@ -91,20 +92,14 @@ function telaMes() {
   const f = filtroAtual();
   const doMes = L.contasDoMes(ui.dados, ui.mes);
   const lista = L.filtrar(doMes, f);
-  const r = L.resumo(lista, ui.dados.config.renda);
+  const r = L.resumo(lista, ui.dados.config.renda, L.somar(L.gastosDoMes(ui.dados, ui.mes)));
   const partes = f === 'tudo' ? L.porDono(doMes) : [];
   const pct = r.total ? Math.round((r.pago / r.total) * 100) : 0;
   const abertas = lista.filter((c) => !c.pago);
   const pagas = lista.filter((c) => c.pago);
   const tudoPago = lista.length > 0 && abertas.length === 0;
   return `
-  <header class="topo">
-    <button class="seta" data-acao="mes-ant" aria-label="Mês anterior">‹</button>
-    <button class="titulo-mes" data-acao="mes-hoje" ${ui.mes === mesAtual() ? 'disabled' : ''}>
-      <h1>${L.nomeMes(ui.mes)}</h1>${ui.mes === mesAtual() ? '' : '<small>voltar para o mês atual</small>'}
-    </button>
-    <button class="seta" data-acao="mes-prox" aria-label="Próximo mês">›</button>
-  </header>
+  ${cabecalhoMes()}
   ${chipsFiltro()}
   <section class="resumo" aria-label="Resumo do mês">
     <p class="rotulo">${tudoPago ? 'Tudo pago neste mês' : 'Falta pagar'}${f === 'tudo' ? '' : ` · ${esc(nomeDono(f))}`}</p>
@@ -113,7 +108,7 @@ function telaMes() {
     <dl>
       <div><dt>Total do mês</dt><dd>${L.fmtValor(r.total)}</dd></div>
       <div><dt>Já pago</dt><dd>${L.fmtValor(r.pago)}</dd></div>
-      ${f === 'tudo' ? `<div><dt>Sobra da renda</dt><dd class="${r.sobra !== null && r.sobra < 0 ? 'negativo' : ''}">${
+      ${f === 'tudo' ? `<div><dt>Sobra (com gastos)</dt><dd class="${r.sobra !== null && r.sobra < 0 ? 'negativo' : ''}">${
         r.sobra === null ? '<button class="link" data-acao="ir-mais">informar renda</button>' : L.fmtValor(r.sobra)}</dd></div>`
         : `<div><dt>Contas</dt><dd>${pagas.length} de ${lista.length} pagas</dd></div>`}
     </dl>
@@ -128,6 +123,64 @@ function telaMes() {
   ${pagas.length ? `<h2 class="secao">Pagas <span>${pagas.length}</span></h2>
      <ul class="lista">${pagas.map((c) => linhaConta(c, hoje)).join('')}</ul>` : ''}
   <button class="fab" data-acao="nova-conta">+ Conta</button>`;
+}
+
+function cabecalhoMes() {
+  return `
+  <header class="topo">
+    <button class="seta" data-acao="mes-ant" aria-label="Mês anterior">‹</button>
+    <button class="titulo-mes" data-acao="mes-hoje" ${ui.mes === mesAtual() ? 'disabled' : ''}>
+      <h1>${L.nomeMes(ui.mes)}</h1>${ui.mes === mesAtual() ? '' : '<small>voltar para o mês atual</small>'}
+    </button>
+    <button class="seta" data-acao="mes-prox" aria-label="Próximo mês">›</button>
+  </header>`;
+}
+
+function telaGastos() {
+  const f = filtroAtual();
+  const hoje = L.hojeStr();
+  const lista = L.gastosDoMes(ui.dados, ui.mes, f);
+  const total = L.somar(lista);
+  const anterior = L.somar(L.gastosDoMes(ui.dados, L.somaMes(ui.mes, -1), f));
+  const cats = L.porCategoria(lista);
+  const doDia = L.somar(lista.filter((g) => g.data === hoje));
+  const limite = f === 'tudo' ? (ui.dados.config.limiteGastos || 0) : 0;
+  const pct = limite ? Math.min(100, Math.round((total / limite) * 100)) : 0;
+  return `
+  ${cabecalhoMes()}
+  ${chipsFiltro()}
+  <section class="resumo ${limite && total > limite ? 'estourou' : ''}" aria-label="Gastos do mês">
+    <p class="rotulo">Gastos do dia a dia${f === 'tudo' ? '' : ` · ${esc(nomeDono(f))}`}</p>
+    <p class="destaque">${L.fmtValor(total)}</p>
+    ${limite ? `<div class="barra" role="img" aria-label="${pct}% do limite usado"><div style="width:${pct}%"></div></div>
+      <p class="limite">${total > limite ? `Passou ${L.fmtValor(total - limite)} do limite de ${L.fmtValor(limite)}`
+        : `Restam ${L.fmtValor(limite - total)} do limite de ${L.fmtValor(limite)}`}</p>` : ''}
+    <dl>
+      <div><dt>Hoje</dt><dd>${ui.mes === mesAtual() ? L.fmtValor(doDia) : '—'}</dd></div>
+      <div><dt>Lançamentos</dt><dd>${lista.length}</dd></div>
+      <div><dt>Mês anterior</dt><dd>${L.fmtValor(anterior)}</dd></div>
+    </dl>
+    ${!limite && f === 'tudo' ? '<p class="limite"><button class="link" data-acao="ir-mais">Definir um limite mensal</button></p>' : ''}
+  </section>
+  ${lista.length === 0 ? `<div class="vazio"><p>Nenhum gasto ${f === 'tudo' ? '' : `de "${esc(nomeDono(f))}" `}em ${L.nomeMes(ui.mes)}.</p>
+    <p>Toque em <strong>+ Gasto</strong> para anotar lanche, mercado, combustível e outras compras do dia.</p></div>` : `
+  <h2 class="secao">Por categoria</h2>
+  <section class="cartao"><ul class="proj cats">
+    ${cats.map((c) => `<li><div>
+      <span class="proj-mes">${esc(c.categoria)}</span>
+      <span class="proj-barra"><span style="width:${(c.total / cats[0].total) * 100}%"></span></span>
+      <span class="proj-valor">${L.fmtValor(c.total)}</span></div></li>`).join('')}
+  </ul></section>
+  ${L.porDia(lista).map((d) => `
+  <h2 class="secao dia"><b>${L.rotuloDia(d.data, hoje)}</b><span>${L.fmtValor(d.total)}</span></h2>
+  <ul class="lista">
+    ${d.itens.map((g) => `
+    <li class="item"><button class="item-corpo" data-acao="editar-gasto" data-id="${esc(g.id)}">
+      <span class="conta-nome">${esc(g.descricao)}</span>
+      <span class="conta-meta">${esc(g.categoria || 'Outros')}${f === 'tudo' ? ` · ${esc(nomeDono(L.donoDe(g)))}` : ''}</span>
+    </button><span class="conta-valor">${L.fmtValor(g.valor)}</span></li>`).join('')}
+  </ul>`).join('')}`}
+  <button class="fab" data-acao="novo-gasto">+ Gasto</button>`;
 }
 
 function telaFuturo() {
@@ -201,6 +254,15 @@ function telaMais() {
     </form>
   </section>
   <section class="cartao">
+    <h2>Limite de gastos do dia a dia</h2>
+    <p class="ajuda">Opcional. A aba Gastos mostra quanto ainda resta no mês.</p>
+    <form data-form="limite" class="linha-form">
+      <label class="sr" for="limite">Limite mensal de gastos</label>
+      <div class="campo-rs"><span>R$</span><input id="limite" name="limite" inputmode="decimal" value="${ui.dados.config.limiteGastos ? L.valorParaCampo(ui.dados.config.limiteGastos) : ''}" placeholder="0,00"></div>
+      <button class="btn">Salvar</button>
+    </form>
+  </section>
+  <section class="cartao">
     <h2>Seu nome</h2>
     <p class="ajuda">Aparece no filtro e nas contas que são só suas.</p>
     <form data-form="nome" class="linha-form">
@@ -211,8 +273,12 @@ function telaMais() {
   </section>
   <section class="cartao">
     <h2>Backup</h2>
-    <p class="ajuda">Baixa um arquivo com todas as contas. Guarde uma cópia de vez em quando.</p>
-    <button class="btn" data-acao="exportar">Exportar backup</button>
+    <p class="ajuda">Baixa um arquivo com tudo o que está no app. Guarde uma cópia de vez em quando.</p>
+    <div class="linha-botoes">
+      <button class="btn" data-acao="exportar">Exportar backup</button>
+      <button class="btn" data-acao="importar">Restaurar backup</button>
+    </div>
+    <input type="file" id="arquivo-backup" accept="application/json,.json" hidden>
   </section>
   <section class="cartao">
     <h2>Conta</h2>
@@ -221,13 +287,13 @@ function telaMais() {
   </section>`;
 }
 
-const ABAS = [['mes', 'Mês', '▤'], ['futuro', 'Futuro', '↗'], ['fixas', 'Fixas', '↻'], ['mais', 'Mais', '⋯']];
+const ABAS = [['mes', 'Contas', '▤'], ['gastos', 'Gastos', '◎'], ['futuro', 'Futuro', '↗'], ['fixas', 'Fixas', '↻'], ['mais', 'Mais', '⋯']];
 
 function render() {
   if (ui.user === undefined) { $app.innerHTML = '<p class="carregando">Carregando…</p>'; return; }
   if (ui.user === null) { $app.innerHTML = telaLogin(); return; }
   if (!ui.dados) { $app.innerHTML = '<p class="carregando">Carregando suas contas…</p>'; return; }
-  const tela = { mes: telaMes, futuro: telaFuturo, fixas: telaFixas, mais: telaMais }[ui.aba]();
+  const tela = { mes: telaMes, gastos: telaGastos, futuro: telaFuturo, fixas: telaFixas, mais: telaMais }[ui.aba]();
   $app.innerHTML = `
     ${store.demo ? '<p class="faixa">Modo demonstração: nada é salvo.</p>' : ''}
     ${!navigator.onLine ? '<p class="faixa">Sem internet. As alterações serão enviadas quando a conexão voltar.</p>' : ''}
@@ -283,6 +349,30 @@ function formConta(c) {
       <button class="btn primario">Salvar</button>
     </div>
   </form>`);
+}
+
+function formGasto(g) {
+  const data = g ? g.data : (ui.mes === mesAtual() ? L.hojeStr() : `${ui.mes}-01`);
+  const cat = g?.categoria || 'Alimentação';
+  abrirSheet(`
+  <form data-form="gasto" data-id="${esc(g?.id || '')}" novalidate>
+    <h2>${g ? 'Editar gasto' : 'Novo gasto'}</h2>
+    ${campoValor('valor', g?.valor, 'Quanto foi')}
+    <label>O que foi<input name="descricao" maxlength="60" list="sugestoes" autocomplete="off" value="${esc(g?.descricao || '')}" placeholder="Ex.: Lanche (opcional)"></label>
+    <datalist id="sugestoes">${L.sugestoesGasto(ui.dados.gastos).map((s) => `<option value="${esc(s.descricao)}">`).join('')}</datalist>
+    <fieldset class="dono-campo"><legend>Categoria</legend><div class="chips quebra">
+      ${L.CATEGORIAS_GASTO.map((c) => `<label><input type="radio" name="categoria" value="${c}" ${c === cat ? 'checked' : ''}><span>${c}</span></label>`).join('')}
+    </div></fieldset>
+    ${campoDono(g && L.donoDe(g))}
+    <label>Dia<input name="data" type="date" required value="${data}" max="${L.hojeStr()}"></label>
+    <p class="erro" role="alert" hidden></p>
+    <div class="acoes">
+      ${g ? `<button type="button" class="btn perigo" data-acao="excluir-gasto" data-id="${esc(g.id)}">Excluir</button>` : ''}
+      <button type="button" class="btn" data-acao="fechar">Cancelar</button>
+      <button class="btn primario">Salvar</button>
+    </div>
+  </form>`);
+  if (!g) $sheet.querySelector('[name=valor]').focus();
 }
 
 function formRec(r) {
@@ -379,6 +469,7 @@ const acoes = {
       ...L.paraGravar(c), pago,
       pagoEm: pago ? L.hojeStr() : null,
       pagoPor: pago ? ui.user.email : null,
+      pagoPorUid: pago ? ui.user.uid : null,
     }, erroGravar);
     if (pago) toast(`${c.nome}: marcada como paga`);
   },
@@ -397,6 +488,16 @@ const acoes = {
     }
     fecharSheet();
   },
+
+  'novo-gasto': () => formGasto(null),
+  'editar-gasto': (el) => { const g = ui.dados.gastos.find((x) => x.id === el.dataset.id); if (g) formGasto(g); },
+  'excluir-gasto': (el) => {
+    const g = ui.dados.gastos.find((x) => x.id === el.dataset.id);
+    if (!g || !confirm(`Excluir o gasto "${g.descricao}"?`)) return;
+    store.apagar('gastos', g.id, erroGravar);
+    fecharSheet();
+  },
+  importar: () => document.getElementById('arquivo-backup').click(),
 
   'nova-rec': () => formRec(null),
   'editar-rec': (el) => formRec(ui.dados.recorrentes.find((r) => r.id === el.dataset.id)),
@@ -471,6 +572,32 @@ const envios = {
     fecharSheet();
   },
 
+  gasto: (form) => {
+    const f = Object.fromEntries(new FormData(form));
+    const erro = (msg) => { const p = form.querySelector('.erro'); p.textContent = msg; p.hidden = false; };
+    const valor = L.parseValor(f.valor);
+    if (!valor) return erro('Informe o valor, por exemplo 45,00.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.data || '')) return erro('Informe o dia.');
+    const categoria = f.categoria || 'Outros';
+    const antigo = ui.dados.gastos.find((g) => g.id === form.dataset.id);
+    store.gravar('gastos', antigo ? antigo.id : store.novoId('gastos'), {
+      descricao: (f.descricao || '').trim() || categoria, valor, categoria, dono: f.dono || 'casa',
+      data: f.data, mes: f.data.slice(0, 7),
+      criadoEm: antigo?.criadoEm || Date.now(), criadoPor: antigo?.criadoPor || ui.user.email,
+    }, erroGravar);
+    if (!antigo) toast(`Gasto de ${L.fmtValor(valor)} anotado`);
+    if (f.data.slice(0, 7) !== ui.mes) { ui.mes = f.data.slice(0, 7); render(); }
+    fecharSheet();
+  },
+
+  limite: (form) => {
+    const txt = new FormData(form).get('limite');
+    const limiteGastos = txt.trim() === '' ? 0 : L.parseValor(txt);
+    if (limiteGastos === null) return toast('Valor inválido. Exemplo: 800,00');
+    store.gravar('config', 'geral', { limiteGastos }, erroGravar);
+    toast(limiteGastos ? 'Limite salvo' : 'Limite removido');
+  },
+
   rec: (form) => {
     const lido = lerForm(form);
     if (!lido) return;
@@ -512,11 +639,41 @@ document.addEventListener('change', (ev) => {
   if (ev.target.name === 'tipo') {
     ev.target.form.querySelector('[data-so-anual]').hidden = ev.target.value !== 'anual';
   }
+  if (ev.target.id === 'arquivo-backup' && ev.target.files[0]) restaurar(ev.target);
 });
+// Ao escolher uma descrição já usada, marca a mesma categoria da última vez.
+document.addEventListener('input', (ev) => {
+  if (ev.target.name !== 'descricao' || ev.target.form.dataset.id) return;
+  const txt = ev.target.value.trim().toLowerCase();
+  const s = L.sugestoesGasto(ui.dados.gastos).find((x) => x.descricao.toLowerCase() === txt);
+  const radio = s && [...ev.target.form.querySelectorAll('[name=categoria]')].find((r) => r.value === s.categoria);
+  if (radio) radio.checked = true;
+});
+
+async function restaurar(input) {
+  const lido = L.lerBackup(await input.files[0].text());
+  input.value = '';
+  if (lido.erro) return toast(lido.erro);
+  const n = lido.itens.length;
+  if (!confirm(`Restaurar ${n} ${n === 1 ? 'item' : 'itens'} deste backup? O que existir com a mesma identificação volta a ser como no arquivo. Nada é apagado.`)) return;
+  for (const [col, id, dados] of lido.itens) store.gravar(col, id, dados, erroGravar);
+  toast('Backup restaurado');
+}
 window.addEventListener('online', render);
 window.addEventListener('offline', render);
 
 // ---------- Início ----------
+
+// Atalho do ícone do app (segurar o ícone > "Novo gasto"): abre direto no formulário.
+function abrirAtalho() {
+  const url = new URL(location.href);
+  const novo = url.searchParams.get('novo');
+  if (!novo) return;
+  url.searchParams.delete('novo');
+  history.replaceState(null, '', url);
+  if (novo === 'gasto') { ui.aba = 'gastos'; render(); formGasto(null); }
+  if (novo === 'conta') { ui.aba = 'mes'; render(); formConta(null); }
+}
 
 let registrou = false;
 store.onAuth((user) => {
@@ -528,12 +685,14 @@ store.onAuth((user) => {
   if (user) {
     pararEscuta = store.subscribe(
       (dados) => {
-        ui.dados = dados;
+        const primeira = !ui.dados;
+        ui.dados = { gastos: [], ...dados };
         if (!dados.config.pessoas?.[user.uid] && !registrou) {   // primeira vez neste aparelho/conta
           registrou = true;
           store.gravar('config', 'geral', { pessoas: { [user.uid]: L.nomePadrao(user.email) } }, erroGravar);
         }
         render();
+        if (primeira) abrirAtalho();
       },
       (msg) => toast(msg),
     );
